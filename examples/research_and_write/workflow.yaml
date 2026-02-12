@@ -1,0 +1,178 @@
+linj_version: "0.1"
+
+nodes:
+  # 1. 研究阶段
+  - id: "ResearchNode"
+    type: "tool"
+    call:
+      name: "research_topic"
+      args:
+        topic: { $path: "$.input.topic" }
+    write_to: "$.research_data"
+    reads: ["$.input.topic"]
+    writes: ["$.research_data"]
+    title: "课题研究"
+    description: "收集相关课题的研究材料和统计数据"
+
+  # 2. 生成草稿
+  - id: "GenerateDraft"
+    type: "hint"
+    template: "基于以下研究材料生成一篇关于 {{topic}} 的短文：\n{{materials}}"
+    vars:
+      topic: { $path: "$.input.topic" }
+      materials: { $path: "$.research_data.materials" }
+    write_to: "$.draft_prompt"
+    reads: ["$.input.topic", "$.research_data.materials"]
+    writes: ["$.draft_prompt"]
+    title: "准备草稿 Prompt"
+
+  - id: "LLM_Draft"
+    type: "tool"
+    call:
+      name: "llm_call"
+      args:
+        prompt: { $path: "$.draft_prompt" }
+    write_to: "$.article_content"
+    reads: ["$.draft_prompt"]
+    writes: ["$.article_content"]
+    title: "生成首稿"
+    description: "调用 LLM 生成文章初稿"
+
+  # 3. 审计阶段
+  - id: "AuditNode"
+    type: "tool"
+    call:
+      name: "audit_article"
+      args:
+        content: { $path: "$.article_content" }
+    write_to: "$.audit_report"
+    reads: ["$.article_content"]
+    writes: ["$.audit_report"]
+    out_contract:
+      type: "object"
+      required: ["score", "feedback"]
+      properties:
+        score: { type: "number" }
+        feedback: { type: "string" }
+    title: "内容审计"
+    description: "评估内容质量并打分"
+
+  # 4. 质量门控
+  - id: "QualityGate"
+    type: "gate"
+    condition: "value('$.audit_report.score') > 70"
+    then: ["GlossaryCheck"]
+    else: ["RefinePrompt"]
+    reads: ["$.audit_report.score"]
+    title: "质量门控"
+    description: "如果分数大于 70 则进入发布流程，否则进行优化"
+
+  # 5. 优化阶段 (Loop)
+  - id: "RefinePrompt"
+    type: "hint"
+    template: "目前的文章内容如下：\n{{content}}\n\n审计反馈：{{feedback}}\n请根据反馈优化文章，使其更加深入和详细。"
+    vars:
+      content: { $path: "$.article_content" }
+      feedback: { $path: "$.audit_report.feedback" }
+    write_to: "$.refine_prompt"
+    reads: ["$.article_content", "$.audit_report.feedback"]
+    writes: ["$.refine_prompt"]
+    title: "准备优化 Prompt"
+
+  - id: "LLM_Refine"
+    type: "tool"
+    call:
+      name: "llm_call"
+      args:
+        prompt: { $path: "$.refine_prompt" }
+    write_to: "$.article_content"
+    reads: ["$.refine_prompt"]
+    writes: ["$.article_content"]
+    title: "内容优化"
+    description: "根据反馈重新生成/优化文章"
+
+  # 6. 术语检查 (JoinNode)
+  - id: "GlossaryCheck"
+    type: "join"
+    input_from: "$.article_content"
+    output_to: "$.final_content"
+    reads: ["$.article_content"]
+    writes: ["$.final_content"]
+    glossary:
+      - forbid: ["绝对", "完美", "最强"] # 禁止词汇
+    title: "术语与风格检查"
+    description: "确保文章不包含禁止的词汇"
+
+  # 7. 发布阶段
+  - id: "PublishNode"
+    type: "tool"
+    call:
+      name: "publish_result"
+      args:
+        title: { $path: "$.input.topic" }
+        content: { $path: "$.final_content" }
+    write_to: "$.publish_result"
+    reads: ["$.input.topic", "$.final_content"]
+    writes: ["$.publish_result"]
+    effect: "write"
+    repeat_safe: false
+    out_contract:
+      type: "object"
+      required: ["publish_url"]
+      properties:
+        publish_url: { type: "string" }
+    title: "正式发布"
+    description: "发布最终审核通过的文章"
+
+edges:
+  # 研究链
+  - from: "ResearchNode"
+    to: "GenerateDraft"
+    kind: "data"
+  
+  - from: "GenerateDraft"
+    to: "LLM_Draft"
+    kind: "data"
+
+  - from: "LLM_Draft"
+    to: "AuditNode"
+    kind: "data"
+
+  # 门控链
+  - from: "AuditNode"
+    to: "QualityGate"
+    kind: "data"
+
+  # 优化分支 (Loop)
+  - from: "QualityGate"
+    to: "RefinePrompt"
+    kind: "control" # 注意：gate 节点的 then/else 并不一定要在 edges 里显式声明为 data，但 control 依赖有助于拓扑排序？
+    # 实际上 Executor 使用 activated_nodes，gate 的 get_next_nodes 会更新 activated_nodes。
+    # linj_autogen/executor/runner.py:192 会调用 get_next_nodes 并将其加入 activated_nodes。
+
+  - from: "RefinePrompt"
+    to: "LLM_Refine"
+    kind: "data"
+
+  - from: "LLM_Refine"
+    to: "AuditNode"
+    kind: "data"
+
+  # 发布分支
+  - from: "QualityGate"
+    to: "GlossaryCheck"
+    kind: "control"
+
+  - from: "GlossaryCheck"
+    to: "PublishNode"
+    kind: "data"
+
+loops:
+  - id: "RefinementLoop"
+    entry: "AuditNode"
+    members: ["AuditNode", "QualityGate", "RefinePrompt", "LLM_Refine"]
+    max_rounds: 50
+
+policies:
+  max_steps: 200
+  max_rounds: 50 # 限制循环次数

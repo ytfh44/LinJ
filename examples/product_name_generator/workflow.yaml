@@ -1,0 +1,83 @@
+linj_version: "0.1"
+
+nodes:
+  # 1. 提取关键词 (ToolNode)
+  - id: "ExtractKeywords"
+    type: "tool"
+    call:
+      name: "extract_keywords"
+      args:
+        description: { $path: "$.input.description" }
+    write_to: "$.keywords"
+    reads: ["$.input.description"]
+    writes: ["$.keywords"]
+    title: "提取关键词"
+    description: "从产品描述中提取关键信息"
+
+  # 2. 生成提示词 (HintNode)
+  - id: "GeneratePrompt"
+    type: "hint"
+    template: "请为以下产品生成 5 个创意名称，产品关键词：{{keywords}}。请各占一行。"
+    vars:
+      keywords: { $path: "$.keywords" }
+    write_to: "$.prompt"
+    reads: ["$.keywords"]
+    writes: ["$.prompt"]
+    title: "生成 Prompt"
+
+  # 3. 模拟 LLM 生成 (ToolNode)
+  - id: "MockLLM"
+    type: "tool"
+    call:
+      name: "mock_llm"
+      args:
+        prompt: { $path: "$.prompt" }
+    write_to: "$.raw_names"
+    reads: ["$.prompt"]
+    writes: ["$.raw_names"]
+    title: "生成名称"
+    description: "调用（模拟）LLM 生成创意名称"
+
+  # 4. 验证与输出 (JoinNode)
+  - id: "ValidateNames"
+    type: "join"
+    input_from: "$.raw_names"
+    output_to: "$.final_names"
+    reads: ["$.raw_names"]
+    writes: ["$.final_names"]
+    glossary:
+      - forbid: ["垃圾", "糟糕", "废品"]  # 禁止词汇
+    title: "验证名称"
+    description: "检查生成的名称是否包含敏感词"
+
+  # 5. 质量门控 (GateNode)
+  - id: "QualityGate"
+    type: "gate"
+    condition: "len($.final_names.split('\n')) >= 3"
+    then: [] # Finish
+    else: [] # Finish
+    reads: ["$.final_names"]
+    title: "质量检查"
+    description: "检查生成的名称数量是否达标"
+
+edges:
+  # 数据依赖链
+  - from: "ExtractKeywords"
+    to: "GeneratePrompt"
+    kind: "data"
+  
+  - from: "GeneratePrompt"
+    to: "MockLLM"
+    kind: "data"
+
+  - from: "MockLLM"
+    to: "ValidateNames"
+    kind: "data"
+
+  - from: "ValidateNames"
+    to: "QualityGate"
+    kind: "data"
+
+policies:
+  max_steps: 10
+  max_rounds: 1
