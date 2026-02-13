@@ -1,14 +1,14 @@
 """
-CommitManager 单元测试
+CommitManager Unit Tests
 
-测试范围：
-- 基本提交功能
-- 只读优化（空变更集）
-- 非相交优化
-- 基准修订检查
-- 冲突处理
-- 队列处理
-- 线程安全
+Test scope:
+- Basic commit functionality
+- Read-only optimization (empty changeset)
+- Non-intersection optimization
+- Base revision check
+- Conflict handling
+- Queue processing
+- Thread safety
 """
 
 import threading
@@ -24,10 +24,10 @@ from linj_autogen.core.state import StateManager
 
 
 class TestCommitManagerBasic:
-    """基本功能测试"""
+    """Basic functionality tests"""
 
     def test_init(self):
-        """测试初始化"""
+        """Test initialization"""
         state = StateManager()
         manager = CommitManager(state)
 
@@ -37,7 +37,7 @@ class TestCommitManagerBasic:
         assert manager.get_accepted_count() == 0
 
     def test_submit_single_changeset(self):
-        """测试提交单个变更集"""
+        """Test submitting a single changeset"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
@@ -52,38 +52,38 @@ class TestCommitManagerBasic:
         assert state.get("$.data.value") == 42
 
     def test_submit_empty_changeset_readonly_optimization(self):
-        """测试空变更集的只读优化"""
+        """Test read-only optimization for empty changeset"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        cs = ChangeSet()  # 空变更集
+        cs = ChangeSet()  # Empty changeset
         result = manager.submit(
             step_id=1, base_revision=0, changeset=cs, handle="handle-1"
         )
 
         assert result.success is True
         assert result.step_id == 1
-        assert result.new_revision == 0  # 空变更集不改变版本
+        assert result.new_revision == 0  # Empty changeset does not change revision
         assert manager.get_accepted_count() == 1
 
     def test_submit_out_of_order(self):
-        """测试乱序提交"""
+        """Test out-of-order submission"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 先提交 step 2（与 step 1 不相交）
+        # Submit step 2 first (disjoint from step 1)
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.b", value=2)])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # 由于 step 1 未提交，无法判断是否相交，step 2 应该排队
+        # Since step 1 is not submitted, cannot determine intersection, step 2 should be queued
         assert result2.success is False
         assert manager.get_pending_count() == 1
 
-        # 提交 step 1
+        # Submit step 1
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # step 1 应该成功，step 2 应该被自动处理（因为路径不相交）
+        # step 1 should succeed, step 2 should be auto-processed (because paths are disjoint)
         assert result1.success is True
         assert manager.get_accepted_count() == 2
         assert state.get("$.data.a") == 1
@@ -91,36 +91,36 @@ class TestCommitManagerBasic:
 
 
 class TestBaseRevisionCheck:
-    """基准修订检查测试"""
+    """Base revision check tests"""
 
     def test_base_revision_mismatch(self):
-        """测试基准版本不匹配"""
+        """Test base version mismatch"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 先提交 step 1
+        # Submit step 1 first
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # 尝试用旧版本提交 step 2
+        # Try to submit step 2 with old version
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.b", value=2)])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # 应该失败，因为当前版本已经是 1
+        # Should fail because current revision is already 1
         assert result2.success is False
         assert isinstance(result2.error, ConflictError)
         assert "Base revision mismatch" in str(result2.error.message)
 
     def test_base_revision_match(self):
-        """测试基准版本匹配"""
+        """Test base version match"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 提交 step 1
+        # Submit step 1
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # 用正确版本提交 step 2
+        # Submit step 2 with correct version
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.b", value=2)])
         result2 = manager.submit(step_id=2, base_revision=1, changeset=cs2, handle="h2")
 
@@ -129,51 +129,51 @@ class TestBaseRevisionCheck:
 
 
 class TestNonIntersectionOptimization:
-    """非相交优化测试"""
+    """Non-intersection optimization tests"""
 
     def test_non_intersecting_changesets_can_accept_early(self):
-        """测试不相交变更集在缺口填补后可以被接受"""
+        """Test non-intersecting changesets can be accepted after gap is filled"""
         state = StateManager({"a": {}, "b": {}})
         manager = CommitManager(state)
 
-        # 提交 step 2（不相交路径）
+        # Submit step 2 (disjoint paths)
         cs2 = ChangeSet(writes=[WriteOp(path="$.b.value", value=2)])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # 由于 step 1 缺失，必须排队等待以确保安全
+        # Since step 1 is missing, must queue for safety
         assert result2.success is False
         assert manager.get_pending_count() == 1
 
-        # 提交 step 1
+        # Submit step 1
         cs1 = ChangeSet(writes=[WriteOp(path="$.a.value", value=1)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
         assert result1.success is True
-        # step 1 完成后，step 2 应该被自动处理并接受（因为不相交）
+        # After step 1 completes, step 2 should be auto-processed and accepted (because disjoint)
         assert manager.get_accepted_count() == 2
         assert state.get("$.b.value") == 2
 
     def test_intersecting_changesets_cannot_accept_early(self):
-        """测试相交变更集不能提前接受"""
+        """Test intersecting changesets cannot be accepted early"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 先提交 step 2（与 step 1 相交的路径）
+        # Submit step 2 first (paths that intersect with step 1)
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.value", value=2)])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # 由于 step 1 还未提交，无法判断是否相交，step 2 应该排队
+        # Since step 1 is not yet submitted, cannot determine intersection, step 2 should queue
         assert result2.success is False
         assert manager.get_pending_count() == 1
 
-        # 提交 step 1（相交路径）
+        # Submit step 1 (intersecting paths)
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.value", value=1)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # step 1 应该成功
+        # step 1 should succeed
         assert result1.success is True
 
-        # 此时 check_intersection_since_revision 应该发现冲突
+        # At this point, check_intersection_since_revision should find conflict
         # step 1 became revision 1. step 2 base=0.
         # step 2 intersects step 1. -> Rejected.
         assert manager.get_accepted_count() == 1
@@ -185,18 +185,18 @@ class TestNonIntersectionOptimization:
         assert isinstance(res2.error, ConflictError)
 
     def test_parent_child_path_intersection(self):
-        """测试父子路径相交"""
+        """Test parent-child path intersection"""
         state = StateManager({"data": {"nested": {}}})
         manager = CommitManager(state)
 
-        # step 2 修改父路径（与 step 1 的子路径相交）
+        # step 2 modifies parent path (intersects with step 1's child path)
         cs2 = ChangeSet(writes=[WriteOp(path="$.data", value={"new": 1})])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # step 1 还未提交，无法判断，应该排队
+        # step 1 not submitted yet, cannot determine, should queue
         assert result2.success is False
 
-        # step 1 修改子路径
+        # step 1 modifies child path
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.nested.value", value=1)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
@@ -208,15 +208,15 @@ class TestNonIntersectionOptimization:
         assert res2.success is False
 
     def test_array_index_non_intersection(self):
-        """测试数组下标不相交"""
+        """Test array index non-intersection"""
         state = StateManager({"items": [0, 0, 0]})
         manager = CommitManager(state)
 
-        # step 2 修改 items[1]
+        # step 2 modifies items[1]
         cs2 = ChangeSet(writes=[WriteOp(path="$.items[1]", value=2)])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # 缺失 step 1 -> 排队
+        # Missing step 1 -> queue
         assert result2.success is False
 
         # Submit step 1 (disjoint)
@@ -229,32 +229,32 @@ class TestNonIntersectionOptimization:
         assert state.get("$.items[1]") == 2
 
     def test_delete_operation_intersection(self):
-        """测试删除操作不相交"""
+        """Test delete operation non-intersection"""
         state = StateManager({"data": {"a": 1, "b": 2}})
         manager = CommitManager(state)
 
-        # step 2 删除 data.a（与 step 1 的 data.b 不相交）
+        # step 2 deletes data.a (disjoint from step 1's data.b)
         cs2 = ChangeSet(deletes=[DeleteOp(path="$.data.a")])
         result2 = manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # step 1 还未提交，无法判断，应该排队
+        # step 1 not submitted yet, cannot determine, should queue
         assert result2.success is False
 
-        # step 1 写入 data.b（与 step 2 的删除路径不相交）
+        # step 1 writes data.b (disjoint from step 2's delete path)
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.b", value=10)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # step 1 成功，step 2 应该被自动处理（因为路径不相交）
+        # step 1 succeeds, step 2 should be auto-processed (because paths are disjoint)
         assert manager.get_accepted_count() == 2
-        assert state.get("$.data.a") is None  # 已删除
+        assert state.get("$.data.a") is None  # Deleted
         assert state.get("$.data.b") == 10
 
 
 class TestQueueProcessing:
-    """队列处理测试"""
+    """Queue processing tests"""
 
     def test_process_queue_empty(self):
-        """测试处理空队列"""
+        """Test processing empty queue"""
         state = StateManager()
         manager = CommitManager(state)
 
@@ -262,59 +262,60 @@ class TestQueueProcessing:
         assert len(results) == 0
 
     def test_process_queue_with_pending(self):
-        """测试处理有等待项的队列"""
+        """Test processing queue with pending items"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 先让 step 2 排队（与 step 1 不相交）
+        # Let step 2 queue first (disjoint from step 1)
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.b", value=2)])
         manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # step 2 在队列中
+        # step 2 is in queue
         assert manager.get_pending_count() == 1
 
-        # 提交 step 1（不相交路径）
+        # Submit step 1 (disjoint paths)
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # step 1 成功，step 2 应该被自动处理（因为路径不相交）
+        # step 1 succeeds, step 2 should be auto-processed (because paths are disjoint)
         assert manager.get_accepted_count() == 2
 
     def test_process_queue_outdated_revision(self):
-        """测试处理时遇到过时版本（不相交优化应允许通过）"""
+        """Test encountering outdated revision during processing (non-intersection optimization should allow through)"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # step 2 用旧版本排队
+        # step 2 queues with old revision
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.b", value=2)])
         manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
         assert manager.get_pending_count() == 1
 
-        # 提交 step 1
+        # Submit step 1
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # step 1 成功。step 2 不相交，可以合并。
-        # 即使 base_revision=0 < current=1.
+        # step 1 succeeds. step 2 is disjoint, can merge.
+        # Even though base_revision=0 < current=1.
 
         # step 2 should be ACCEPTED because of non-intersection check logic
         # in _process_queue_internal
 
         assert manager.get_accepted_count() == 2
         res2 = manager.get_result(2)
+        assert res2 is not None
         assert res2.success is True
 
 
 class TestGetters:
-    """Getter 方法测试"""
+    """Getter methods tests"""
 
     def test_get_pending(self):
-        """测试获取待处理列表"""
+        """Test getting pending list"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 提交一些变更集
+        # Submit some changesets
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
@@ -322,18 +323,18 @@ class TestGetters:
         manager.submit(step_id=2, base_revision=1, changeset=cs2, handle="h2")
 
         pending = manager.get_pending()
-        assert len(pending) == 0  # 都被接受了
+        assert len(pending) == 0  # All were accepted
 
-        # 让 step 3 排队
+        # Let step 3 queue
         cs3 = ChangeSet(writes=[WriteOp(path="$.data.c", value=3)])
         manager.submit(step_id=3, base_revision=2, changeset=cs3, handle="h3")
 
-        # 如果版本不匹配，它会被拒绝而不是排队
+        # If revision doesn't match, it will be rejected rather than queued
         pending = manager.get_pending()
         assert len(pending) == 0
 
     def test_get_result(self):
-        """测试获取结果"""
+        """Test getting results"""
         state = StateManager()
         manager = CommitManager(state)
 
@@ -345,32 +346,32 @@ class TestGetters:
         assert result.success is True
         assert result.step_id == 1
 
-        # 不存在的 step_id
+        # Non-existent step_id
         assert manager.get_result(999) is None
 
     def test_is_all_accepted(self):
-        """测试检查是否全部接受"""
+        """Test checking if all are accepted"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 空状态
+        # Empty state
         assert manager.is_all_accepted() is False
 
-        # 提交一个
+        # Submit one
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=1)])
         manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
         assert manager.is_all_accepted() is True
 
-        # 添加一个待处理的（由于版本不匹配会被拒绝）
+        # Add a pending one (will be rejected due to revision mismatch)
         cs2 = ChangeSet(writes=[WriteOp(path="$.data.b", value=2)])
         manager.submit(step_id=2, base_revision=0, changeset=cs2, handle="h2")
 
-        # step 2 被拒绝，所以只有一个被接受
-        # 注意：被拒绝的也算 pending，但不是 accepted
+        # step 2 is rejected, so only one is accepted
+        # Note: rejected also counts as pending, but not accepted
 
     def test_reset(self):
-        """测试重置"""
+        """Test reset"""
         state = StateManager()
         manager = CommitManager(state)
 
@@ -387,31 +388,31 @@ class TestGetters:
 
 
 class TestThreadSafety:
-    """线程安全测试 - 简化版本"""
+    """Thread safety tests - simplified version"""
 
     def test_lock_protection(self):
-        """测试锁保护基本功能"""
+        """Test lock protection basic functionality"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 验证锁存在且可访问
+        # Verify lock exists and is accessible
         assert manager._lock is not None
 
-        # 测试基本提交（单线程）
+        # Test basic commit (single-threaded)
         cs = ChangeSet(writes=[WriteOp(path="$.data.value", value=42)])
         result = manager.submit(step_id=1, base_revision=0, changeset=cs, handle="h1")
         assert result.success is True
 
 
 class TestComplexScenarios:
-    """复杂场景测试"""
+    """Complex scenarios tests"""
 
     def test_mixed_operations(self):
-        """测试混合操作"""
+        """Test mixed operations"""
         state = StateManager({"data": {"a": 1, "b": 2, "c": 3}})
         manager = CommitManager(state)
 
-        # 写入、删除、混合
+        # Write, delete, mixed
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.a", value=10)])
         cs2 = ChangeSet(deletes=[DeleteOp(path="$.data.b")])
         cs3 = ChangeSet(
@@ -428,35 +429,35 @@ class TestComplexScenarios:
         assert state.get("$.data.c") == 30
 
     def test_large_step_id_gap(self):
-        """测试大间隔 step_id"""
+        """Test large step_id gap"""
         state = StateManager({"data": {}})
         manager = CommitManager(state)
 
-        # 提交 step 100（与 step 1 不相交）
+        # Submit step 100 (disjoint from step 1)
         cs100 = ChangeSet(writes=[WriteOp(path="$.data.x", value=100)])
         result100 = manager.submit(
             step_id=100, base_revision=0, changeset=cs100, handle="h100"
         )
 
-        # step 1 未提交，无法判断，应该排队
+        # step 1 not submitted, cannot determine, should queue
         assert result100.success is False
 
-        # 提交 step 1（不相交路径）
+        # Submit step 1 (disjoint paths)
         cs1 = ChangeSet(writes=[WriteOp(path="$.data.y", value=1)])
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs1, handle="h1")
 
-        # step 1 成功
+        # step 1 succeeds
         assert result1.success is True
 
-        # step 100 仍然有 gap (2..99)，应该继续 pending
+        # step 100 still has gap (2..99), should remain pending
         assert manager.get_accepted_count() == 1
         res100 = manager.get_result(100)
-        # 结果可能为 None 或 success=False (queued)
+        # Result may be None or success=False (queued)
         if res100:
             assert res100.success is False
 
     def test_duplicate_submission(self):
-        """测试重复提交"""
+        """Test duplicate submission"""
         state = StateManager()
         manager = CommitManager(state)
 
@@ -465,6 +466,6 @@ class TestComplexScenarios:
         result1 = manager.submit(step_id=1, base_revision=0, changeset=cs, handle="h1")
         result2 = manager.submit(step_id=1, base_revision=0, changeset=cs, handle="h1")
 
-        # 第二次应该返回缓存的结果
+        # Second call should return cached result
         assert result1.success == result2.success
         assert result1.new_revision == result2.new_revision

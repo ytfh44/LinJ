@@ -1,7 +1,7 @@
 """
-执行上下文和状态管理接口
+Execution Context and State Management Interface
 
-定义执行过程中的上下文管理和状态操作接口。
+Defines the context management and state operation interfaces during execution.
 """
 
 from abc import ABC, abstractmethod
@@ -14,23 +14,23 @@ import time
 from .types import NodeExecution, ExecutionStatus, ExecutionContext
 from ..core.path import PathResolver as CorePathResolver
 
-# 为了兼容性保留 PathResolver 引用
+# PathResolver reference kept for compatibility
 PathResolver = CorePathResolver
 
 
 class StateScope(Enum):
-    """状态作用域枚举"""
+    """State scope enum"""
 
-    GLOBAL = "global"  # 全局作用域
-    SESSION = "session"  # 会话作用域
-    STEP = "step"  # 步骤作用域
-    NODE = "node"  # 节点作用域
-    TEMPORARY = "temporary"  # 临时作用域
+    GLOBAL = "global"  # Global scope
+    SESSION = "session"  # Session scope
+    STEP = "step"  # Step scope
+    NODE = "node"  # Node scope
+    TEMPORARY = "temporary"  # Temporary scope
 
 
 @dataclass
 class StateEntry:
-    """状态条目"""
+    """State entry"""
 
     value: Any
     scope: StateScope
@@ -40,127 +40,127 @@ class StateEntry:
     write_count: int = 0
 
     def mark_read(self) -> None:
-        """标记读取"""
+        """Mark as read"""
         self.read_count += 1
 
     def mark_write(self) -> None:
-        """标记写入"""
+        """Mark as written"""
         self.write_count += 1
         self.timestamp = time.time()
 
 
 class StateManager(ABC):
     """
-    状态管理器抽象接口
+    Abstract State Manager Interface
 
-    定义状态操作的统一接口：
-    - 状态读写和查询
-    - 作用域管理
-    - 变更追踪
-    - 持久化和恢复
+    Defines the unified interface for state operations:
+    - State read/write and query
+    - Scope management
+    - Change tracking
+    - Persistence and recovery
     """
 
     @abstractmethod
     def get(self, path: str, scope: Optional[StateScope] = None) -> Any:
         """
-        获取状态值
+        Get state value
 
         Args:
-            path: 状态路径
-            scope: 状态作用域
+            path: State path
+            scope: State scope
 
         Returns:
-            状态值
+            State value
         """
         pass
 
     @abstractmethod
     def set(self, path: str, value: Any, scope: Optional[StateScope] = None) -> None:
         """
-        设置状态值
+        Set state value
 
         Args:
-            path: 状态路径
-            value: 要设置的值
-            scope: 状态作用域
+            path: State path
+            value: Value to set
+            scope: State scope
         """
         pass
 
     @abstractmethod
     def exists(self, path: str) -> bool:
         """
-        检查路径是否存在
+        Check if path exists
 
         Args:
-            path: 状态路径
+            path: State path
 
         Returns:
-            True 表示存在，False 表示不存在
+            True if exists, False if not exists
         """
         pass
 
     @abstractmethod
     def delete(self, path: str) -> bool:
         """
-        删除状态项
+        Delete state item
 
         Args:
-            path: 状态路径
+            path: State path
 
         Returns:
-            True 表示删除成功，False 表示路径不存在
+            True if deleted successfully, False if path does not exist
         """
         pass
 
     @abstractmethod
     def list_keys(self, prefix: str = "") -> List[str]:
         """
-        列出所有键
+        List all keys
 
         Args:
-            prefix: 键前缀过滤
+            prefix: Key prefix filter
 
         Returns:
-            键列表
+            Key list
         """
         pass
 
     @abstractmethod
     def clear(self, scope: Optional[StateScope] = None) -> None:
         """
-        清空状态
+        Clear state
 
         Args:
-            scope: 要清空的作用域，None表示清空所有
+            scope: Scope to clear, None means clear all
         """
         pass
 
     @abstractmethod
     def snapshot(self) -> Dict[str, Any]:
         """
-        创建状态快照
+        Create state snapshot
 
         Returns:
-            状态快照字典
+            State snapshot dictionary
         """
         pass
 
     @abstractmethod
     def restore(self, snapshot: Dict[str, Any]) -> None:
         """
-        恢复状态快照
+        Restore state snapshot
 
         Args:
-            snapshot: 状态快照
+            snapshot: State snapshot
         """
         pass
 
 
 class BaseStateManager(StateManager):
     """
-    基础状态管理器实现
+    Base State Manager Implementation
 
-    提供内存中的状态管理功能
+    Provides in-memory state management functionality
     """
 
     def __init__(self):
@@ -169,38 +169,38 @@ class BaseStateManager(StateManager):
         self._change_log: List[Dict[str, Any]] = []
 
     def get(self, path: str, scope: Optional[StateScope] = None) -> Any:
-        """获取状态值"""
+        """Get state value"""
         if path not in self._state:
             return None
 
         entry = self._state[path]
         entry.mark_read()
 
-        # 检查作用域过滤
+        # Check scope filter
         if scope and entry.scope != scope:
             return None
 
-        # 触发观察者
+        # Trigger watchers
         self._notify_watchers(path, "read", entry.value)
 
         return entry.value
 
     def set(self, path: str, value: Any, scope: Optional[StateScope] = None) -> None:
-        """设置状态值"""
+        """Set state value"""
         scope = scope or StateScope.GLOBAL
 
         old_value = None
         if path in self._state:
             old_entry = self._state[path]
             old_value = old_entry.value
-            # 更新现有条目
+            # Update existing entry
             old_entry.value = value
             old_entry.mark_write()
         else:
-            # 创建新条目
+            # Create new entry
             self._state[path] = StateEntry(value=value, scope=scope)
 
-        # 记录变更
+        # Record change
         change = {
             "path": path,
             "old_value": old_value,
@@ -210,22 +210,22 @@ class BaseStateManager(StateManager):
         }
         self._change_log.append(change)
 
-        # 触发观察者
+        # Trigger watchers
         self._notify_watchers(path, "write", value)
 
     def exists(self, path: str) -> bool:
-        """检查路径是否存在"""
+        """Check if path exists"""
         return path in self._state
 
     def delete(self, path: str) -> bool:
-        """删除状态项"""
+        """Delete state item"""
         if path not in self._state:
             return False
 
         old_value = self._state[path].value
         del self._state[path]
 
-        # 记录变更
+        # Record change
         change = {
             "path": path,
             "old_value": old_value,
@@ -235,19 +235,19 @@ class BaseStateManager(StateManager):
         }
         self._change_log.append(change)
 
-        # 触发观察者
+        # Trigger watchers
         self._notify_watchers(path, "delete", None)
 
         return True
 
     def list_keys(self, prefix: str = "") -> List[str]:
-        """列出所有键"""
+        """List all keys"""
         if prefix:
             return [key for key in self._state.keys() if key.startswith(prefix)]
         return list(self._state.keys())
 
     def clear(self, scope: Optional[StateScope] = None) -> None:
-        """清空状态"""
+        """Clear state"""
         if scope is None:
             self._state.clear()
         else:
@@ -266,19 +266,19 @@ class BaseStateManager(StateManager):
         )
 
     def snapshot(self) -> Dict[str, Any]:
-        """创建状态快照"""
+        """Create state snapshot"""
         return {key: entry.value for key, entry in self._state.items()}
 
     def restore(self, snapshot: Dict[str, Any]) -> None:
-        """恢复状态快照"""
-        # 清空当前状态
+        """Restore state snapshot"""
+        # Clear current state
         self._state.clear()
 
-        # 恢复快照
+        # Restore snapshot
         for path, value in snapshot.items():
             self._state[path] = StateEntry(value=value, scope=StateScope.GLOBAL)
 
-        # 记录恢复操作
+        # Record restore operation
         self._change_log.append(
             {
                 "action": "restore",
@@ -287,13 +287,13 @@ class BaseStateManager(StateManager):
         )
 
     def watch(self, path: str, callback: Callable) -> None:
-        """添加状态观察者"""
+        """Add state watcher"""
         if path not in self._watchers:
             self._watchers[path] = []
         self._watchers[path].append(callback)
 
     def unwatch(self, path: str, callback: Callable) -> None:
-        """移除状态观察者"""
+        """Remove state watcher"""
         if path in self._watchers:
             try:
                 self._watchers[path].remove(callback)
@@ -303,25 +303,25 @@ class BaseStateManager(StateManager):
                 pass
 
     def _notify_watchers(self, path: str, action: str, value: Any) -> None:
-        """通知观察者"""
+        """Notify watchers"""
         if path in self._watchers:
             for callback in self._watchers[path]:
                 try:
                     callback(path, action, value)
                 except Exception:
-                    # 观察者错误不应该影响主流程
+                    # Watcher errors should not affect main flow
                     pass
 
     def get_change_log(self) -> List[Dict[str, Any]]:
-        """获取变更日志"""
+        """Get change log"""
         return self._change_log.copy()
 
     def clear_change_log(self) -> None:
-        """清空变更日志"""
+        """Clear change log"""
         self._change_log.clear()
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取状态统计信息"""
+        """Get state statistics"""
         scope_counts = {}
         for entry in self._state.values():
             scope_name = entry.scope.value
@@ -342,9 +342,9 @@ class BaseStateManager(StateManager):
 
 class ContextManager:
     """
-    上下文管理器
+    Context Manager
 
-    管理执行上下文的生命周期和状态流转
+    Manages the lifecycle and state transitions of execution contexts
     """
 
     def __init__(self, state_manager: StateManager):
@@ -359,15 +359,15 @@ class ContextManager:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> ExecutionContext:
         """
-        创建执行上下文
+        Create execution context
 
         Args:
-            context_id: 上下文ID
-            initial_state: 初始状态
-            metadata: 元数据
+            context_id: Context ID
+            initial_state: Initial state
+            metadata: Metadata
 
         Returns:
-            执行上下文
+            Execution context
         """
         context = ExecutionContext(
             state=initial_state or {},
@@ -380,18 +380,18 @@ class ContextManager:
         return context
 
     def get_context(self, context_id: str) -> Optional[ExecutionContext]:
-        """获取执行上下文"""
+        """Get execution context"""
         return self._contexts.get(context_id)
 
     def set_active_context(self, context_id: str) -> bool:
-        """设置活动上下文"""
+        """Set active context"""
         if context_id in self._contexts:
             self._active_context = self._contexts[context_id]
             return True
         return False
 
     def get_active_context(self) -> Optional[ExecutionContext]:
-        """获取活动上下文"""
+        """Get active context"""
         return self._active_context
 
     def update_context(
@@ -400,7 +400,7 @@ class ContextManager:
         state_updates: Dict[str, Any],
         metadata_updates: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        """更新上下文"""
+        """Update context"""
         if context_id not in self._contexts:
             return False
 
@@ -413,7 +413,7 @@ class ContextManager:
         return True
 
     def delete_context(self, context_id: str) -> bool:
-        """删除上下文"""
+        """Delete context"""
         if context_id not in self._contexts:
             return False
 
@@ -424,16 +424,16 @@ class ContextManager:
         return True
 
     def list_contexts(self) -> List[str]:
-        """列出所有上下文ID"""
+        """List all context IDs"""
         return list(self._contexts.keys())
 
     def clear_all_contexts(self) -> None:
-        """清空所有上下文"""
+        """Clear all contexts"""
         self._contexts.clear()
         self._active_context = None
 
     def get_context_stats(self) -> Dict[str, Any]:
-        """获取上下文统计信息"""
+        """Get context statistics"""
         return {
             "total_contexts": len(self._contexts),
             "active_context_id": (

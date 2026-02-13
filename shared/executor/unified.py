@@ -1,8 +1,8 @@
 """
-LinJ工作流统一执行器
+LinJ Workflow Unified Executor
 
-提供与AutoGen和LangGraph版本完全一致的执行接口
-确保相同输入产生相同输出（满足LinJ规范底线目标）
+Provides execution interface fully consistent with AutoGen and LangGraph versions
+Ensures same inputs produce same outputs (meets LinJ specification baseline goal)
 """
 
 import logging
@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ExecutionConfig:
-    """执行配置"""
+    """Execution configuration"""
 
-    backend: str = "autogen"  # "autogen" 或 "langgraph"
+    backend: str = "autogen"  # "autogen" or "langgraph"
     enable_parallel: bool = False
     max_concurrency: int = 4
     max_steps: Optional[int] = None
@@ -32,7 +32,7 @@ class ExecutionConfig:
 
 @dataclass
 class ExecutionResult:
-    """执行结果"""
+    """Execution result"""
 
     success: bool
     final_state: Dict[str, Any]
@@ -43,14 +43,14 @@ class ExecutionResult:
 
 class LinJExecutor:
     """
-    LinJ工作流执行器
+    LinJ workflow executor
 
-    统一AutoGen和LangGraph版本的执行行为：
-    - 相同的文档解析
-    - 相同的状态管理
-    - 相同的调度逻辑
-    - 相同的错误处理
-    - 相同的追踪记录
+    Unifies execution behavior across AutoGen and LangGraph versions:
+    - Same document parsing
+    - Same state management
+    - Same scheduling logic
+    - Same error handling
+    - Same tracing records
     """
 
     def __init__(self, config: Optional[ExecutionConfig] = None):
@@ -58,7 +58,7 @@ class LinJExecutor:
         self._setup_backend()
 
     def _setup_backend(self) -> None:
-        """设置后端执行器"""
+        """Set up backend executor"""
         if self.config.backend == "langgraph":
             try:
                 # Use shared executor adapter for LangGraph
@@ -98,23 +98,23 @@ class LinJExecutor:
         initial_state: Optional[Dict[str, Any]] = None,
     ) -> ExecutionResult:
         """
-        执行LinJ工作流
+        Execute LinJ workflow
 
         Args:
-            document: LinJ文档（字典或LinJDocument对象）
-            initial_state: 初始状态
+            document: LinJ document (dict or LinJDocument object)
+            initial_state: Initial state
 
         Returns:
-            执行结果
+            Execution result
 
         Raises:
-            ValidationError: 文档验证失败
-            ResourceConstraintUnsatisfied: 资源约束不满足
+            ValidationError: Document validation failed
+            ResourceConstraintUnsatisfied: Resource constraint not satisfied
         """
         logger.info(f"Executing LinJ workflow with {self.config.backend} backend")
 
         try:
-            # 解析文档
+            # Parse document
             if isinstance(document, dict):
                 try:
                     doc = LinJDocument.model_validate(document)
@@ -123,13 +123,13 @@ class LinJExecutor:
             else:
                 doc = document
 
-            # 验证文档
+            # Validate document
             self._validate_document(doc)
 
-            # 应用配置覆盖
+            # Apply config overrides
             doc = self._apply_config_overrides(doc)
 
-            # 执行工作流
+            # Execute workflow
             backend_result = self._adapter.execute_workflow(doc, initial_state)
 
             return ExecutionResult(
@@ -149,18 +149,18 @@ class LinJExecutor:
             )
 
     def _validate_document(self, doc: LinJDocument) -> None:
-        """验证LinJ文档"""
-        # 版本验证
+        """Validate LinJ document"""
+        # Version validation
         major_version = doc.get_major_version()
-        if major_version != 0:  # 假设我们实现的是0.x版本
+        if major_version != 0:  # assuming we're implementing 0.x version
             raise ValidationError(f"Unsupported major version: {major_version}")
 
-        # 节点ID唯一性检查
+        # Node ID uniqueness check
         node_ids = [node.id for node in doc.nodes]
         if len(node_ids) != len(set(node_ids)):
             raise ValidationError("Duplicate node IDs found")
 
-        # 依赖有效性检查
+        # Dependency validity check
         node_id_set = set(node_ids)
         for edge in doc.edges:
             if edge.from_ not in node_id_set:
@@ -168,7 +168,7 @@ class LinJExecutor:
             if edge.to not in node_id_set:
                 raise ValidationError(f"Unknown target node: {edge.to}")
 
-        # 策略验证
+        # Policy validation
         if (
             doc.requirements
             and doc.requirements.allow_parallel
@@ -176,7 +176,7 @@ class LinJExecutor:
         ):
             logger.warning("Document requires parallel but config disables it")
 
-        # 循环验证
+        # Loop validation
         if doc.loops:
             for loop in doc.loops:
                 if (
@@ -189,11 +189,11 @@ class LinJExecutor:
                     )
 
     def _apply_config_overrides(self, doc: LinJDocument) -> LinJDocument:
-        """应用配置覆盖到文档"""
-        # 创建文档副本以避免修改原对象
+        """Apply config overrides to document"""
+        # Create document copy to avoid modifying original
         doc_dict = doc.model_dump()
 
-        # 覆盖策略
+        # Override policies
         if not doc_dict.get("policies"):
             doc_dict["policies"] = {}
 
@@ -205,14 +205,14 @@ class LinJExecutor:
         if self.config.timeout_ms:
             policies["timeout_ms"] = self.config.timeout_ms
 
-        # 覆盖需求
+        # Override requirements
         if not doc_dict.get("requirements"):
             doc_dict["requirements"] = {}
 
         requirements = doc_dict["requirements"]
         requirements["allow_parallel"] = self.config.enable_parallel
 
-        # 重建文档对象
+        # Reconstruct document object
         return LinJDocument.model_validate(doc_dict)
 
     def validate_consistency(
@@ -222,15 +222,15 @@ class LinJExecutor:
         iterations: int = 3,
     ) -> Dict[str, Any]:
         """
-        验证两个后端的执行一致性
+        Validate execution consistency between backends
 
         Args:
-            document: LinJ文档
-            initial_state: 初始状态
-            iterations: 测试迭代次数
+            document: LinJ document
+            initial_state: Initial state
+            iterations: Number of test iterations
 
         Returns:
-            一致性验证结果
+            Consistency validation result
         """
         logger.info("Validating execution consistency between backends")
 
@@ -240,12 +240,12 @@ class LinJExecutor:
             backend_results = []
 
             for i in range(iterations):
-                # 创建后端特定配置
+                # Create backend-specific config
                 config = ExecutionConfig(
                     backend=backend,
                     enable_parallel=self.config.enable_parallel,
                     max_concurrency=self.config.max_concurrency,
-                    trace_enabled=True,  # 启用追踪以获得详细信息
+                    trace_enabled=True,  # Enable tracing for detailed information
                 )
 
                 executor = LinJExecutor(config)
@@ -254,7 +254,7 @@ class LinJExecutor:
 
             results[backend] = backend_results
 
-        # 分析一致性
+        # Analyze consistency
         autogen_states = [r.final_state for r in results["autogen"] if r.success]
         langgraph_states = [r.final_state for r in results["langgraph"] if r.success]
 
@@ -278,11 +278,11 @@ class LinJExecutor:
         autogen_states: List[Dict[str, Any]],
         langgraph_states: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """分析状态一致性"""
+        """Analyze state consistency"""
         if not autogen_states or not langgraph_states:
             return {"error": "No successful executions to compare"}
 
-        # 检查所有执行是否产生相同状态
+        # Check if all executions produce the same state
         autogen_consistent = all(state == autogen_states[0] for state in autogen_states)
         langgraph_consistent = all(
             state == langgraph_states[0] for state in langgraph_states
@@ -303,7 +303,7 @@ class LinJExecutor:
         }
 
 
-# 便利函数
+# Convenience functions
 def execute_linj(
     document: Union[Dict[str, Any], LinJDocument],
     backend: str = "autogen",
@@ -311,16 +311,16 @@ def execute_linj(
     **config_kwargs,
 ) -> ExecutionResult:
     """
-    便利函数：执行LinJ工作流
+    Convenience function: Execute LinJ workflow
 
     Args:
-        document: LinJ文档
-        backend: 后端选择（"autogen"或"langgraph"）
-        initial_state: 初始状态
-        **config_kwargs: 额外配置参数
+        document: LinJ document
+        backend: Backend choice ("autogen" or "langgraph")
+        initial_state: Initial state
+        **config_kwargs: Extra config parameters
 
     Returns:
-        执行结果
+        Execution result
     """
     config = ExecutionConfig(backend=backend, **config_kwargs)
     executor = LinJExecutor(config)
@@ -334,16 +334,16 @@ def validate_consistency(
     **config_kwargs,
 ) -> Dict[str, Any]:
     """
-    便利函数：验证执行一致性
+    Convenience function: Validate execution consistency
 
     Args:
-        document: LinJ文档
-        initial_state: 初始状态
-        iterations: 测试迭代次数
-        **config_kwargs: 配置参数
+        document: LinJ document
+        initial_state: Initial state
+        iterations: Number of test iterations
+        **config_kwargs: Config parameters
 
     Returns:
-        一致性验证结果
+        Consistency validation result
     """
     config = ExecutionConfig(**config_kwargs)
     executor = LinJExecutor(config)

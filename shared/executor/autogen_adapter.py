@@ -1,9 +1,9 @@
 """
-AutoGen执行器适配器
+AutoGen Executor Adapter
 
-提供与统一执行器兼容的接口，使用共享组件执行LinJ工作流。
-为了保证与LangGraph后端的一致性（满足LinJ规范的底线目标），
-本适配器复用shared/executor下的核心组件。
+Provides a unified executor interface compatible interface, using shared components to execute LinJ workflows.
+To ensure consistency with the LangGraph backend (meeting the baseline goal of LinJ specifications),
+this adapter reuses core components from shared/executor.
 """
 
 import logging
@@ -37,9 +37,9 @@ class ConcreteAutoGenEvaluator(AutoGenConditionEvaluator):
 
 class AutoGenExecutorAdapter:
     """
-    AutoGen执行器适配器
+    AutoGen Executor Adapter
 
-    实现统一的execute_workflow接口，使用AutoGen兼容的调度和求值逻辑。
+    Implements a unified execute_workflow interface using AutoGen-compatible scheduling and evaluation logic.
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -53,43 +53,43 @@ class AutoGenExecutorAdapter:
         initial_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        执行工作流
+        Execute workflow
 
         Args:
-            document: LinJ文档
-            initial_state: 初始状态
+            document: LinJ document
+            initial_state: Initial state
 
         Returns:
-            执行结果字典，包含final_state, execution_stats等
+            Execution result dictionary containing final_state, execution_stats, etc.
         """
-        # 1. 准备文档对象
+        # 1. Prepare document object
         if isinstance(document, dict):
             doc = LinJDocument.model_validate(document)
         else:
             doc = document
 
-        # 2. 初始化状态管理器
+        # 2. Initialize state manager
         state_manager = StateManager(initial_state or {})
 
-        # 3. 创建执行上下文
+        # 3. Create execution context
         context = ExecutionContext()
-        # 将文档和状态管理器注入上下文 (符合 shared.executor.types.ExecutionContext)
+        # Inject document and state manager into context (complying with shared.executor.types.ExecutionContext)
         context.document = doc
         context.state_manager = state_manager
 
-        # 4. 创建后端组件（使用AutoGen兼容版本）
-        # 使用 AutoGen 兼容的条件求值器
+        # 4. Create backend components (using AutoGen-compatible versions)
+        # Use AutoGen-compatible condition evaluator
         evaluator = ConcreteAutoGenEvaluator(state_manager.get_full_state())
 
-        # 使用 AutoGen 兼容的调度器
+        # Use AutoGen-compatible scheduler
         scheduler = AutoGenDeterministicScheduler(doc.nodes)  # type: ignore
 
-        # 5. 执行主循环
-        # 使用统一的执行逻辑
+        # 5. Main execution loop
+        # Use unified execution logic
         from .runner_utils import execute_nodes_generic
 
-        # 准备后端特定的节点执行器（如果需要，目前使用通用执行器）
-        # 后续可以根据具体后端需求定制 node_executor_fn
+        # Prepare backend-specific node executor (if needed, currently using generic executor)
+        # Can be customized for specific backend needs node_executor_fn
 
         final_state, stats = execute_nodes_generic(
             doc,

@@ -1,9 +1,9 @@
 """
-LangGraph执行器适配器
+LangGraph Executor Adapter
 
-提供与统一执行器兼容的接口，使用共享组件执行LinJ工作流。
-为了保证与AutoGen后端的一致性（满足LinJ规范的底线目标），
-本适配器复用shared/executor下的核心组件。
+Provides an interface compatible with the unified executor, executing LinJ workflows using shared components.
+To ensure consistency with the AutoGen backend (meeting the baseline goal of LinJ specification),
+this adapter reuses core components from shared/executor.
 """
 
 import logging
@@ -33,9 +33,9 @@ class ConcreteLangGraphEvaluator(BaseEvaluator):
 
 class LangGraphExecutorAdapter:
     """
-    LangGraph执行器适配器
+    LangGraph Executor Adapter
 
-    实现统一的execute_workflow接口，使用LangGraph兼容的调度和求值逻辑。
+    Implements the unified execute_workflow interface using LangGraph-compatible scheduling and evaluation logic.
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -49,33 +49,33 @@ class LangGraphExecutorAdapter:
         initial_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        执行工作流
+        Execute workflow
 
         Args:
-            document: LinJ文档
-            initial_state: 初始状态
+            document: LinJ document
+            initial_state: Initial state
 
         Returns:
-            执行结果字典，包含final_state, execution_stats等
+            Execution result dictionary containing final_state, execution_stats, etc.
         """
-        # 1. 准备文档对象
+        # 1. Prepare document object
         if isinstance(document, dict):
             doc = LinJDocument.model_validate(document)
         else:
             doc = document
 
-        # 2. 初始化状态管理器
+        # 2. Initialize state manager
         state_manager = StateManager(initial_state or {})
 
-        # 3. 创建执行后端组件
-        # 使用标准求值器（LangGraph使用标准逻辑）
+        # 3. Create execution backend components
+        # Use standard evaluator (LangGraph uses standard logic)
         evaluator = ConcreteLangGraphEvaluator()
 
-        # 使用标准决定性调度器
+        # Use standard deterministic scheduler
         scheduler = DeterministicScheduler(doc.nodes)
 
-        # 4. 执行主循环
-        # 使用统一的执行逻辑
+        # 4. Execute main loop
+        # Use unified execution logic
         from .runner_utils import execute_nodes_generic
 
         final_state, stats = execute_nodes_generic(

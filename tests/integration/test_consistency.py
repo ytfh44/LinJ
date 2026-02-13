@@ -1,8 +1,8 @@
 """
-LinJ执行一致性测试套件
+LinJ Execution Consistency Test Suite
 
-验证AutoGen和LangGraph版本的执行行为完全一致
-确保满足LinJ规范底线目标：相同输入产生相同最终状态
+Validates that AutoGen and LangGraph backend implementations produce identical execution behavior
+Ensures LinJ specification baseline goal is met: same inputs produce same final state
 """
 
 import pytest
@@ -20,24 +20,24 @@ logger = logging.getLogger(__name__)
 
 
 class TestConsistencyBase:
-    """一致性测试基类"""
+    """Base class for consistency tests"""
 
     @pytest.fixture(autouse=True)
     def setup_logging(self):
-        """设置测试日志"""
+        """Configure test logging"""
         logging.basicConfig(level=logging.DEBUG)
 
     def execute_both_backends(
         self, document: Dict[str, Any], initial_state: Optional[Dict[str, Any]] = None
     ):
-        """使用两个后端执行文档并返回结果"""
+        """Execute document using both backends and return results"""
         autogen_result = execute_linj(document, "autogen", initial_state)
         langgraph_result = execute_linj(document, "langgraph", initial_state)
 
         return autogen_result, langgraph_result
 
     def assert_states_identical(self, state1: Dict[str, Any], state2: Dict[str, Any]):
-        """断言两个状态完全相同"""
+        """Assert that two states are identical"""
         assert state1 == state2, (
             f"States differ:\nAutogen: {state1}\nLangGraph: {state2}"
         )
@@ -45,8 +45,8 @@ class TestConsistencyBase:
     def assert_execution_stats_consistent(
         self, stats1: Dict[str, Any], stats2: Dict[str, Any]
     ):
-        """断言执行统计信息一致"""
-        # 检查关键统计指标
+        """Assert execution statistics are consistent"""
+        # Check key metrics
         key_metrics = ["total_rounds", "total_steps"]
 
         for metric in key_metrics:
@@ -56,10 +56,10 @@ class TestConsistencyBase:
 
 
 class TestBasicNodeExecution(TestConsistencyBase):
-    """基础节点执行一致性测试"""
+    """Basic node execution consistency tests"""
 
     def test_hint_node_execution(self):
-        """测试hint节点执行一致性"""
+        """Test hint node execution consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -76,22 +76,22 @@ class TestBasicNodeExecution(TestConsistencyBase):
 
         autogen_result, langgraph_result = self.execute_both_backends(document)
 
-        # 验证成功执行
+        # Verify successful execution
         assert autogen_result.success
         assert langgraph_result.success
 
-        # 验证状态一致性
+        # Verify state consistency
         self.assert_states_identical(
             autogen_result.final_state, langgraph_result.final_state
         )
 
-        # 验证结果正确性
+        # Verify result correctness
         expected_state = {"greeting": "Hello World!"}
         assert autogen_result.final_state == expected_state
         assert langgraph_result.final_state == expected_state
 
     def test_tool_node_execution(self):
-        """测试tool节点执行一致性"""
+        """Test tool node execution consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -118,7 +118,7 @@ class TestBasicNodeExecution(TestConsistencyBase):
         )
 
     def test_join_node_execution(self):
-        """测试join节点执行一致性"""
+        """Test join node execution consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -148,7 +148,7 @@ class TestBasicNodeExecution(TestConsistencyBase):
         assert autogen_result.final_state == expected_state
 
     def test_gate_node_execution(self):
-        """测试gate节点执行一致性"""
+        """Test gate node execution consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -169,7 +169,7 @@ class TestBasicNodeExecution(TestConsistencyBase):
             "edges": [{"from": "gate1", "to": "hint1", "kind": "control"}],
         }
 
-        # 测试条件为真的情况
+        # Test case when condition is true
         initial_state_true = {"test_value": True}
         autogen_result_true, langgraph_result_true = self.execute_both_backends(
             document, initial_state_true
@@ -183,10 +183,10 @@ class TestBasicNodeExecution(TestConsistencyBase):
 
 
 class TestDeterministicScheduling(TestConsistencyBase):
-    """决定性调度一致性测试"""
+    """Deterministic scheduling consistency tests"""
 
     def test_rank_based_scheduling(self):
-        """测试基于rank的决定性调度一致性"""
+        """Test rank-based deterministic scheduling consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -228,7 +228,7 @@ class TestDeterministicScheduling(TestConsistencyBase):
         )
 
     def test_node_order_tie_breaking(self):
-        """测试节点顺序决定性打破规则一致性"""
+        """Test node order tie-breaking consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -268,10 +268,10 @@ class TestDeterministicScheduling(TestConsistencyBase):
 
 
 class TestDependencyResolution(TestConsistencyBase):
-    """依赖解析一致性测试"""
+    """Dependency resolution consistency tests"""
 
     def test_data_dependency_resolution(self):
-        """测试数据依赖解析一致性"""
+        """Test data dependency resolution consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -301,7 +301,7 @@ class TestDependencyResolution(TestConsistencyBase):
             autogen_result.final_state, langgraph_result.final_state
         )
 
-        # 验证依赖解析正确
+        # Verify dependency resolution is correct
         expected_state = {
             "shared_data": "produced data",
             "result": "consumed: produced data",
@@ -309,7 +309,7 @@ class TestDependencyResolution(TestConsistencyBase):
         assert autogen_result.final_state == expected_state
 
     def test_control_dependency_resolution(self):
-        """测试控制依赖解析一致性"""
+        """Test control dependency resolution consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -340,10 +340,10 @@ class TestDependencyResolution(TestConsistencyBase):
 
 
 class TestComplexWorkflows(TestConsistencyBase):
-    """复杂工作流一致性测试"""
+    """Complex workflow consistency tests"""
 
     def test_multi_level_workflow(self):
-        """测试多层级工作流一致性"""
+        """Test multi-level workflow consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -398,7 +398,7 @@ class TestComplexWorkflows(TestConsistencyBase):
         )
 
     def test_workflow_with_loops(self):
-        """测试带循环的工作流一致性"""
+        """Test workflow with loops consistency"""
         document = {
             "linj_version": "0.1",
             "loops": [
@@ -446,10 +446,10 @@ class TestComplexWorkflows(TestConsistencyBase):
 
 
 class TestErrorHandling(TestConsistencyBase):
-    """错误处理一致性测试"""
+    """Error handling consistency tests"""
 
     def test_validation_error_consistency(self):
-        """测试验证错误一致性"""
+        """Test validation error consistency"""
         invalid_document = {
             "linj_version": "0.1",
             "nodes": [
@@ -458,7 +458,7 @@ class TestErrorHandling(TestConsistencyBase):
                     "type": "hint",
                     "template": "Hello {{name}}!",
                     "vars": {"name": {"$const": "World"}},
-                    # 缺少必需的write_to字段
+                    # Missing required write_to field
                 }
             ],
             "edges": [],
@@ -466,16 +466,16 @@ class TestErrorHandling(TestConsistencyBase):
 
         autogen_result, langgraph_result = self.execute_both_backends(invalid_document)
 
-        # 两个后端都应该失败
+        # Both backends should fail
         assert not autogen_result.success
         assert not langgraph_result.success
 
-        # 错误类型应该相似
+        # Error types should be similar
         assert autogen_result.error is not None
         assert langgraph_result.error is not None
 
     def test_missing_dependency_consistency(self):
-        """测试缺失依赖一致性"""
+        """Test missing dependency consistency"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -498,7 +498,7 @@ class TestErrorHandling(TestConsistencyBase):
 
         autogen_result, langgraph_result = self.execute_both_backends(document)
 
-        # 行为应该一致：要么都成功，要么都失败
+        # Behavior should be consistent: both succeed or both fail
         assert autogen_result.success == langgraph_result.success
 
         if autogen_result.success and langgraph_result.success:
@@ -508,10 +508,10 @@ class TestErrorHandling(TestConsistencyBase):
 
 
 class TestUnifiedExecutor:
-    """统一执行器测试"""
+    """Unified executor tests"""
 
     def test_consistency_validation_function(self):
-        """测试一致性验证函数"""
+        """Test consistency validation function"""
         document = {
             "linj_version": "0.1",
             "nodes": [
@@ -525,7 +525,7 @@ class TestUnifiedExecutor:
             "edges": [],
         }
 
-        # 使用验证函数
+        # Use validation function
         consistency_result = validate_consistency(document, iterations=2)
 
         assert consistency_result is not None
@@ -533,11 +533,11 @@ class TestUnifiedExecutor:
         assert "analysis" in consistency_result
         assert "backend_results" in consistency_result
 
-        # 两个后端都应该有结果
+        # Both backends should have results
         assert "autogen" in consistency_result["backend_results"]
         assert "langgraph" in consistency_result["backend_results"]
 
 
 if __name__ == "__main__":
-    # 运行一致性测试
+    # Run consistency tests
     pytest.main([__file__, "-v"])

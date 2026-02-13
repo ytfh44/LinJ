@@ -1,7 +1,7 @@
 """
-调度器抽象类
+Scheduler Abstract Class
 
-定义节点调度的抽象接口和基础实现，支持多种调度策略。
+Defines the abstract interface and base implementation for node scheduling, supporting multiple scheduling strategies.
 """
 
 from abc import ABC, abstractmethod
@@ -13,35 +13,35 @@ from .types import ExecutionContext, ExecutionStatus
 
 
 class SchedulingStrategy(Enum):
-    """调度策略枚举"""
+    """Scheduling strategy enumeration"""
 
-    DETERMINISTIC = "deterministic"  # 决定性调度
-    PRIORITY = "priority"  # 优先级调度
-    ROUND_ROBIN = "round_robin"  # 轮询调度
-    PARALLEL = "parallel"  # 并行调度
-    ADAPTIVE = "adaptive"  # 自适应调度
+    DETERMINISTIC = "deterministic"  # Deterministic scheduling
+    PRIORITY = "priority"  # Priority scheduling
+    ROUND_ROBIN = "round_robin"  # Round-robin scheduling
+    PARALLEL = "parallel"  # Parallel scheduling
+    ADAPTIVE = "adaptive"  # Adaptive scheduling
 
 
 @dataclass
 class SchedulingDecision:
-    """调度决策结果"""
+    """Scheduling decision result"""
 
-    selected_nodes: List[Any]  # 选中的节点列表
-    execution_order: List[str]  # 执行顺序
-    concurrency_level: int  # 并发级别
+    selected_nodes: List[Any]  # Selected node list
+    execution_order: List[str]  # Execution order
+    concurrency_level: int  # Concurrency level
     strategy: SchedulingStrategy
-    metadata: Dict[str, Any]  # 额外的调度信息
+    metadata: Dict[str, Any]  # Additional scheduling information
 
 
 class Scheduler(ABC):
     """
-    调度器抽象基类
+    Scheduler Abstract Base Class
 
-    定义节点调度的核心接口：
-    - 节点选择和排序
-    - 依赖关系分析
-    - 并发安全性检查
-    - 执行状态管理
+    Defines the core interface for node scheduling:
+    - Node selection and ordering
+    - Dependency analysis
+    - Concurrency safety checks
+    - Execution state management
     """
 
     @abstractmethod
@@ -52,65 +52,65 @@ class Scheduler(ABC):
         max_concurrency: Optional[int] = None,
     ) -> SchedulingDecision:
         """
-        从就绪节点中选择要执行的节点
+        Select nodes to execute from ready nodes
 
         Args:
-            ready_nodes: 就绪节点列表
-            context: 执行上下文
-            max_concurrency: 最大并发数限制
+            ready_nodes: List of ready nodes
+            context: Execution context
+            max_concurrency: Maximum concurrency limit
 
         Returns:
-            调度决策结果
+            Scheduling decision result
         """
         pass
 
     @abstractmethod
     def can_execute(self, node: Any, context: ExecutionContext) -> bool:
         """
-        检查节点是否可以执行
+        Check if a node can execute
 
         Args:
-            node: 节点对象
-            context: 执行上下文
+            node: Node object
+            context: Execution context
 
         Returns:
-            True 表示可以执行，False 表示不能执行
+            True if can execute, False otherwise
         """
         pass
 
     @abstractmethod
     def get_dependencies(self, node: Any) -> List[str]:
         """
-        获取节点的依赖列表
+        Get the dependency list for a node
 
         Args:
-            node: 节点对象
+            node: Node object
 
         Returns:
-            依赖节点ID列表
+            List of dependency node IDs
         """
         pass
 
     @abstractmethod
     def mark_executing(self, node_id: str) -> None:
-        """标记节点开始执行"""
+        """Mark a node as starting execution"""
         pass
 
     @abstractmethod
     def mark_completed(self, node_id: str, success: bool = True) -> None:
-        """标记节点执行完成"""
+        """Mark a node as completed execution"""
         pass
 
     def allocate_step_id(self) -> int:
-        """分配步骤ID"""
-        # 默认实现：简单的递增计数器
+        """Allocate a step ID"""
+        # Default implementation: simple incrementing counter
         if not hasattr(self, "_step_counter"):
             self._step_counter = 0
         self._step_counter += 1
         return self._step_counter
 
     def get_execution_stats(self) -> Dict[str, Any]:
-        """获取调度统计信息"""
+        """Get scheduling statistics"""
         return {
             "total_scheduled": 0,
             "successful_executions": 0,
@@ -121,9 +121,9 @@ class Scheduler(ABC):
 
 class BaseScheduler(Scheduler):
     """
-    基础调度器实现
+    Base Scheduler Implementation
 
-    提供通用的调度逻辑和状态管理功能
+    Provides common scheduling logic and state management functionality
     """
 
     def __init__(self):
@@ -138,18 +138,18 @@ class BaseScheduler(Scheduler):
         }
 
     def can_execute(self, node: Any, context: ExecutionContext) -> bool:
-        """检查节点是否可以执行"""
+        """Check if a node can execute"""
         node_id = getattr(node, "id", "unknown")
 
-        # 检查是否已在执行中
+        # Check if already executing
         if node_id in self._executing:
             return False
 
-        # 检查是否已完成
+        # Check if already completed
         if node_id in self._completed or node_id in self._failed:
             return False
 
-        # 检查依赖是否满足
+        # Check if dependencies are satisfied
         dependencies = self.get_dependencies(node)
         for dep_id in dependencies:
             if dep_id not in self._completed:
@@ -158,12 +158,12 @@ class BaseScheduler(Scheduler):
         return True
 
     def mark_executing(self, node_id: str) -> None:
-        """标记节点开始执行"""
+        """Mark a node as starting execution"""
         self._executing.add(node_id)
         self._stats["total_scheduled"] += 1
 
     def mark_completed(self, node_id: str, success: bool = True) -> None:
-        """标记节点执行完成"""
+        """Mark a node as completed execution"""
         self._executing.discard(node_id)
 
         if success:
@@ -174,23 +174,23 @@ class BaseScheduler(Scheduler):
             self._stats["failed_executions"] += 1
 
     def is_executing(self, node_id: str) -> bool:
-        """检查节点是否正在执行"""
+        """Check if a node is currently executing"""
         return node_id in self._executing
 
     def is_completed(self, node_id: str) -> bool:
-        """检查节点是否已完成"""
+        """Check if a node has completed"""
         return node_id in self._completed
 
     def is_failed(self, node_id: str) -> bool:
-        """检查节点是否执行失败"""
+        """Check if a node has failed execution"""
         return node_id in self._failed
 
     def get_pending_nodes(self) -> Set[str]:
-        """获取待执行节点ID"""
+        """Get pending node IDs"""
         return (self._completed | self._failed) - self._executing
 
     def reset(self) -> None:
-        """重置调度器状态"""
+        """Reset scheduler state"""
         self._executing.clear()
         self._completed.clear()
         self._failed.clear()
@@ -202,7 +202,7 @@ class BaseScheduler(Scheduler):
         }
 
     def get_execution_stats(self) -> Dict[str, Any]:
-        """获取调度统计信息"""
+        """Get scheduling statistics"""
         batch_sizes = self._stats["batch_sizes"]
         avg_batch_size = sum(batch_sizes) / len(batch_sizes) if batch_sizes else 0.0
 
@@ -219,9 +219,9 @@ class BaseScheduler(Scheduler):
 
 class DeterministicScheduler(BaseScheduler):
     """
-    决定性调度器
+    Deterministic Scheduler
 
-    基于节点优先级和文档顺序的确定性格调度
+    Deterministic scheduling based on node priority and document order
     """
 
     def __init__(self, nodes: List[Any]):
@@ -239,8 +239,8 @@ class DeterministicScheduler(BaseScheduler):
         context: ExecutionContext,
         max_concurrency: Optional[int] = None,
     ) -> SchedulingDecision:
-        """选择节点进行执行"""
-        # 过滤可执行的节点
+        """Select nodes for execution"""
+        # Filter executable nodes
         executable_nodes = [
             node for node in ready_nodes if self.can_execute(node, context)
         ]
@@ -254,13 +254,13 @@ class DeterministicScheduler(BaseScheduler):
                 metadata={"reason": "no_executable_nodes"},
             )
 
-        # 按决定性规则排序
+        # Sort by deterministic rules
         sorted_nodes = self._sort_deterministically(executable_nodes)
 
-        # 选择第一个节点（单线程执行）
+        # Select the first node (single-threaded execution)
         selected_node = sorted_nodes[0]
 
-        # 记录批量大小
+        # Record batch size
         self._stats["batch_sizes"].append(1)
 
         return SchedulingDecision(
@@ -276,27 +276,27 @@ class DeterministicScheduler(BaseScheduler):
         )
 
     def _sort_deterministically(self, nodes: List[Any]) -> List[Any]:
-        """按决定性规则排序节点"""
+        """Sort nodes by deterministic rules"""
 
         def sort_key(node):
             rank = getattr(node, "rank", 0)
             rank = rank if rank is not None else 0
             order = self._node_order.get(getattr(node, "id", "unknown"), float("inf"))
             node_id = getattr(node, "id", "unknown")
-            return (-rank, order, node_id)  # 负rank实现降序
+            return (-rank, order, node_id)  # Negative rank for descending order
 
         return sorted(nodes, key=sort_key)
 
     def get_dependencies(self, node: Any) -> List[str]:
-        """获取节点的依赖列表"""
+        """Get the dependency list for a node"""
         return getattr(node, "dependencies", [])
 
 
 class ParallelScheduler(BaseScheduler):
     """
-    并行调度器
+    Parallel Scheduler
 
-    支持多节点并行执行，同时保证安全性
+    Supports multi-node parallel execution while ensuring safety
     """
 
     def __init__(self, max_concurrency: int = 4):
@@ -309,11 +309,11 @@ class ParallelScheduler(BaseScheduler):
         context: ExecutionContext,
         max_concurrency: Optional[int] = None,
     ) -> SchedulingDecision:
-        """选择可并行执行的节点"""
-        # 确定最大并发数
+        """Select nodes for parallel execution"""
+        # Determine maximum concurrency
         actual_max = min(max_concurrency or self.max_concurrency, self.max_concurrency)
 
-        # 过滤可执行的节点
+        # Filter executable nodes
         executable_nodes = [
             node for node in ready_nodes if self.can_execute(node, context)
         ]
@@ -327,16 +327,16 @@ class ParallelScheduler(BaseScheduler):
                 metadata={"reason": "no_executable_nodes"},
             )
 
-        # 分组可并行执行的节点
+        # Group nodes that can execute in parallel
         parallel_groups = self._find_parallel_groups(executable_nodes)
 
-        # 选择第一组（尽可能多地并行执行）
+        # Select the first group (execute as many in parallel as possible)
         selected_group = parallel_groups[0] if parallel_groups else executable_nodes[:1]
 
-        # 限制并发数
+        # Limit concurrency
         selected_nodes = selected_group[:actual_max]
 
-        # 记录批量大小
+        # Record batch size
         self._stats["batch_sizes"].append(len(selected_nodes))
 
         return SchedulingDecision(
@@ -354,7 +354,7 @@ class ParallelScheduler(BaseScheduler):
         )
 
     def _find_parallel_groups(self, nodes: List[Any]) -> List[List[Any]]:
-        """找到可并行执行的节点组"""
+        """Find groups of nodes that can execute in parallel"""
         groups = []
 
         for node in nodes:
@@ -363,19 +363,19 @@ class ParallelScheduler(BaseScheduler):
             writes = self._get_node_writes(node)
 
             for group in groups:
-                # 检查是否可以加入该组
+                # Check if can join this group
                 can_join = True
 
                 for member in group:
                     member_reads = self._get_node_reads(member)
                     member_writes = self._get_node_writes(member)
 
-                    # 检查写入冲突
+                    # Check for write conflicts
                     if self._has_path_conflict(writes, member_writes):
                         can_join = False
                         break
 
-                    # 检查读写冲突
+                    # Check for read-write conflicts
                     if self._has_path_conflict(
                         writes, member_reads
                     ) or self._has_path_conflict(reads, member_writes):
@@ -393,31 +393,31 @@ class ParallelScheduler(BaseScheduler):
         return groups
 
     def _get_node_reads(self, node: Any) -> List[str]:
-        """获取节点读取路径"""
+        """Get node read paths"""
         return getattr(node, "reads", [])
 
     def _get_node_writes(self, node: Any) -> List[str]:
-        """获取节点写入路径"""
+        """Get node write paths"""
         return getattr(node, "writes", [])
 
     def _has_path_conflict(self, paths_a: List[str], paths_b: List[str]) -> bool:
-        """检查路径是否有冲突"""
-        # 简化实现：检查是否有完全相同的路径
-        # 实际应该实现更复杂的路径相交检查
+        """Check if paths have conflicts"""
+        # Simplified implementation: check for identical paths
+        # Should implement more complex path intersection check in production
         set_a = set(paths_a)
         set_b = set(paths_b)
         return bool(set_a & set_b)
 
     def get_dependencies(self, node: Any) -> List[str]:
-        """获取节点的依赖列表"""
+        """Get the dependency list for a node"""
         return getattr(node, "dependencies", [])
 
 
 class PriorityScheduler(BaseScheduler):
     """
-    优先级调度器
+    Priority Scheduler
 
-    基于节点优先级进行调度
+    Schedules nodes based on priority
     """
 
     def select_nodes(
@@ -426,7 +426,7 @@ class PriorityScheduler(BaseScheduler):
         context: ExecutionContext,
         max_concurrency: Optional[int] = None,
     ) -> SchedulingDecision:
-        """按优先级选择节点"""
+        """Select nodes by priority"""
         executable_nodes = [
             node for node in ready_nodes if self.can_execute(node, context)
         ]
@@ -440,13 +440,13 @@ class PriorityScheduler(BaseScheduler):
                 metadata={"reason": "no_executable_nodes"},
             )
 
-        # 按优先级排序
+        # Sort by priority
         sorted_nodes = sorted(
             executable_nodes,
             key=lambda n: (-getattr(n, "priority", 0), getattr(n, "id", "unknown")),
         )
 
-        # 选择最高优先级的节点
+        # Select the highest priority node
         selected_node = sorted_nodes[0]
 
         self._stats["batch_sizes"].append(1)
@@ -464,5 +464,5 @@ class PriorityScheduler(BaseScheduler):
         )
 
     def get_dependencies(self, node: Any) -> List[str]:
-        """获取节点的依赖列表"""
+        """Get the dependency list for a node"""
         return getattr(node, "dependencies", [])

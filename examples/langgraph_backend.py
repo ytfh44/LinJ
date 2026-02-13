@@ -1,17 +1,17 @@
 """
 LangGraph Backend Adapter for Examples
 
-完整对齐 LinJ.md 规范的 LangGraph 后端实现：
-- 决定性调度 (11.3)
-- 状态路径 (5)
-- 变更集原子性 (9.2)
-- 节点类型 (13): hint/tool/join/gate
-- 条件表达式 (14): exists/len/value
-- 依赖图 (8)
-- 循环 (12)
-- 并发安全 (11.5)
+Complete LangGraph backend implementation aligned with LinJ.md specification:
+- Deterministic scheduling (11.3)
+- State paths (5)
+- ChangeSet atomicity (9.2)
+- Node types (13): hint/tool/join/gate
+- Condition expressions (14): exists/len/value
+- Dependency graph (8)
+- Loops (12)
+- Thread safety (11.5)
 
-提供与 AutoGen 版本完全兼容的执行接口。
+Provides fully compatible execution interface with AutoGen version.
 """
 
 import asyncio
@@ -23,31 +23,31 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable, Set, Tuple, Union
 from dataclasses import dataclass, field
 
-# 添加项目根目录到 Python 路径
+# Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# 确保 autogen/src 在路径中
+# Ensure autogen/src is in path
 autogen_src = project_root / "autogen" / "src"
 if str(autogen_src) not in sys.path:
     sys.path.insert(0, str(autogen_src))
 
 
 # ============================================================================
-# 路径解析器 (对齐 LinJ.md 5.1-5.4)
+# Path Resolver (aligned with LinJ.md 5.1-5.4)
 # ============================================================================
 
 
 class PathResolver:
-    """状态路径解析器 - 实现 5.1-5.4 节规范"""
+    """State path resolver - implements Sections 5.1-5.4 specification"""
 
     @staticmethod
     def _parse_path_parts(path: str) -> List[str]:
-        """解析路径为部分列表，支持数组索引"""
+        """Parse path into list of parts, supporting array indices"""
         if not path.startswith("$."):
             path = f"$.{path}"
 
-        # 移除 $.
+        # Remove $.
         path = path[2:]
 
         parts = []
@@ -80,11 +80,11 @@ class PathResolver:
 
     @staticmethod
     def get(state: Dict[str, Any], path: str) -> Any:
-        """读取路径值 (5.2) - 不存在返回 null"""
+        """Read path value (5.2) - returns null if not exists"""
         parts = PathResolver._parse_path_parts(path)
         current: Any = state
 
-        # 处理根路径 $
+        # Handle root path $
         if len(parts) == 0:
             return state
 
@@ -109,14 +109,14 @@ class PathResolver:
 
     @staticmethod
     def set(state: Dict[str, Any], path: str, value: Any) -> None:
-        """写入路径值 (5.3)"""
+        """Write path value (5.3)"""
         parts = PathResolver._parse_path_parts(path)
         current: Any = state
 
-        # 遍历到倒数第二个部分
+        # Traverse to second-to-last part
         for i, part in enumerate(parts[:-1]):
             if part not in current or current[part] is None:
-                # 根据下一部分判断创建对象还是数组
+                # Determine whether to create object or array based on next part
                 next_part = parts[i + 1]
                 try:
                     idx = int(next_part)
@@ -128,7 +128,7 @@ class PathResolver:
 
             current = current[part]
 
-        # 设置最后一部分
+        # Set the last part
         last_part = parts[-1]
         if isinstance(current, list):
             idx = int(last_part)
@@ -140,10 +140,10 @@ class PathResolver:
 
     @staticmethod
     def delete(state: Dict[str, Any], path: str) -> None:
-        """删除路径值 (5.4) - 设为 null"""
+        """Delete path value (5.4) - set to null"""
         parts = PathResolver._parse_path_parts(path)
 
-        # 找到目标路径的父级
+        # Find parent of target path
         current: Any = state
         target_path = parts[-1]
 
@@ -166,7 +166,7 @@ class PathResolver:
             else:
                 return
 
-        # 设为 null
+        # Set to null
         if isinstance(current, dict):
             if target_path in current:
                 current[target_path] = None
@@ -179,7 +179,7 @@ class PathResolver:
                 pass
 
     def delete(state: Dict[str, Any], path: str) -> None:
-        """删除路径值 (5.4) - 设为 null"""
+        """Delete path value (5.4) - set to null"""
         if not path.startswith("$."):
             path = f"$.{path}"
 
@@ -206,7 +206,7 @@ class PathResolver:
             else:
                 return
 
-        # 设为 null (不是删除键，因为数组不能缩短)
+        # Set to null (not delete key, because arrays cannot be shortened)
         if isinstance(current, dict):
             if target_path in current:
                 current[target_path] = None
@@ -220,27 +220,27 @@ class PathResolver:
 
     @staticmethod
     def intersect(path_a: str, path_b: str) -> bool:
-        """判断两路径是否相交 (11.4)"""
-        # 前缀判定
+        """Check if two paths intersect (11.4)"""
+        # Prefix check
         if path_a.startswith(path_b) or path_b.startswith(path_a):
             return True
         if path_a == path_b:
             return True
 
-        # 数组下标不同不相交
+        # Different array indices don't intersect
         try:
-            # 提取路径部分和数组下标
+            # Extract path parts and array indices
             parts_a = path_a.replace("$.", "").split(".")
             parts_b = path_b.replace("$.", "").split(".")
 
-            # 检查数组下标是否不同
+            # Check if array indices are different
             min_len = min(len(parts_a), len(parts_b))
             for i in range(min_len):
                 try:
                     idx_a = int(parts_a[i])
                     idx_b = int(parts_b[i])
                     if idx_a != idx_b:
-                        # 下标不同，如果前面部分相同则不相交
+                        # Different indices, if previous parts match, don't intersect
                         prefix_match = True
                         for j in range(i):
                             if parts_a[j] != parts_b[j]:
@@ -258,13 +258,13 @@ class PathResolver:
 
 
 # ============================================================================
-# 变更集 (对齐 LinJ.md 9)
+# ChangeSet (aligned with LinJ.md 9)
 # ============================================================================
 
 
 @dataclass
 class WriteOp:
-    """写操作"""
+    """Write operation"""
 
     path: str
     value: Any
@@ -272,7 +272,7 @@ class WriteOp:
 
 @dataclass
 class DeleteOp:
-    """删除操作"""
+    """Delete operation"""
 
     path: str
 
@@ -280,7 +280,7 @@ class DeleteOp:
 @dataclass
 class ChangeSet:
     """
-    变更集 (9.1)
+    ChangeSet (9.1)
 
     - writes: [{path, value}]
     - deletes: [{path}]
@@ -302,7 +302,7 @@ class ChangeSet:
         return self.get_write_paths() | self.get_delete_paths()
 
     def intersects_with(self, other: "ChangeSet") -> bool:
-        """检查路径相交 (11.4)"""
+        """Check path intersection (11.4)"""
         for path_a in self.get_all_modified_paths():
             for path_b in other.get_all_modified_paths():
                 if PathResolver.intersect(path_a, path_b):
@@ -310,24 +310,24 @@ class ChangeSet:
         return False
 
     def apply_to(self, state: Dict[str, Any]) -> None:
-        """应用变更集 (9.2 原子性由调用方保证)"""
-        # 先删除
+        """Apply ChangeSet (9.2 atomicity guaranteed by caller)"""
+        # Delete first
         for op in self.deletes:
             PathResolver.delete(state, op.path)
-        # 后写入
+        # Write last
         for op in self.writes:
             PathResolver.set(state, op.path, op.value)
 
 
 # ============================================================================
-# 条件表达式评估器 (对齐 LinJ.md 14)
+# Condition Expression Evaluator (aligned with LinJ.md 14)
 # ============================================================================
 
 
 class ConditionEvaluator:
-    """条件表达式评估器 (14)"""
+    """Condition expression evaluator (14)"""
 
-    # 比较操作符
+    # Comparison operators
     COMP_OPS = {
         "==": lambda a, b: a == b,
         "!=": lambda a, b: a != b,
@@ -337,13 +337,13 @@ class ConditionEvaluator:
         "<=": lambda a, b: a <= b if a is not None and b is not None else False,
     }
 
-    # 逻辑操作符
+    # Logical operators
     LOGIC_OPS = {
         "AND": lambda a, b: a and b,
         "OR": lambda a, b: a or b,
     }
 
-    # 路径函数
+    # Path functions
     PATH_FUNCS = {
         "exists": lambda path: path is not None,
         "len": lambda path: len(path) if isinstance(path, list) else 0,
@@ -352,14 +352,14 @@ class ConditionEvaluator:
 
     @classmethod
     def evaluate(cls, condition: str, state: Dict[str, Any]) -> bool:
-        """求值条件表达式"""
+        """Evaluate condition expression"""
         if not condition or not condition.strip():
             return True
 
-        # 预处理：展开函数调用
+        # Preprocess: expand function calls
         expr = condition
 
-        # 展开 exists(path)
+        # Expand exists(path)
         def replace_exists(match):
             path = match.group(1).strip()
             value = PathResolver.get(state, path)
@@ -367,7 +367,7 @@ class ConditionEvaluator:
 
         expr = re.sub(r"exists\(\s*([^)]+)\s*\)", replace_exists, expr)
 
-        # 展开 len(path)
+        # Expand len(path)
         def replace_len(match):
             path = match.group(1).strip()
             value = PathResolver.get(state, path)
@@ -376,7 +376,7 @@ class ConditionEvaluator:
 
         expr = re.sub(r"len\(\s*([^)]+)\s*\)", replace_len, expr)
 
-        # 展开 value(path)
+        # Expand value(path)
         def replace_value(match):
             path = match.group(1).strip()
             value = PathResolver.get(state, path)
@@ -388,12 +388,12 @@ class ConditionEvaluator:
 
         expr = re.sub(r"value\(\s*([^)]+)\s*\)", replace_value, expr)
 
-        # 安全地求值表达式
+        # Safely evaluate expression
         try:
-            # 替换操作符为 Python 语法
+            # Replace operators with Python syntax
             expr = expr.replace("AND", "and").replace("OR", "or").replace("NOT", "not")
 
-            # 添加安全的环境
+            # Add safe environment
             safe_env = {
                 "true": True,
                 "false": False,
@@ -412,12 +412,12 @@ class ConditionEvaluator:
 
 
 # ============================================================================
-# 节点执行器 (对齐 LinJ.md 13)
+# Node Executor (aligned with LinJ.md 13)
 # ============================================================================
 
 
 class NodeExecutor:
-    """节点执行器 - 实现 13 节节点类型语义"""
+    """Node executor - implements Section 13 node type semantics"""
 
     def __init__(self, tools: Dict[str, Callable], state: Dict[str, Any]):
         self.tools = tools
@@ -425,40 +425,40 @@ class NodeExecutor:
 
     def can_retry(self, node: Dict[str, Any], attempt: int) -> bool:
         """
-        检查工具调用是否可以在当前尝试次数时重试 (13.2 节)
+        Check if tool call can be retried at current attempt count (Section 13.2)
 
-        规则：
-        - 若 effect 为 write 且 repeat_safe 为 false：即使全局允许重试，执行器必须不自动重试
-        - 若 effect 为 none 或 read：可按策略重试
+        Rules:
+        - If effect is write and repeat_safe is false: even if globally allowed, executor must not auto-retry
+        - If effect is none or read: can retry according to policy
 
         Args:
-            node: 工具节点配置
-            attempt: 当前尝试次数（0-based）
+            node: Tool node configuration
+            attempt: Current attempt count (0-based)
 
         Returns:
-            是否可以重试
+            Whether retry is allowed
         """
         effect = node.get("effect", "read")
         repeat_safe = node.get("repeat_safe", False)
 
-        # 若 effect 为 write 且 repeat_safe 为 false：禁止重试
+        # If effect is write and repeat_safe is false: forbid retry
         if effect == "write" and not repeat_safe:
             return False
 
-        # 首次尝试不需要重试
+        # First attempt doesn't need retry
         if attempt == 0:
             return True
 
-        # effect 为 none 或 read：允许重试（但需要在调用处控制最大重试次数）
+        # effect is none or read: allow retry (but max retry count needs to be controlled at call site)
         return effect in ("none", "read")
 
     def execute_tool(self, node: Dict[str, Any], retry_count: int = 0) -> ChangeSet:
         """
-        执行 tool 节点 (13.2)
+        Execute tool node (13.2)
 
         Args:
-            node: 工具节点配置
-            retry_count: 当前重试次数（用于判断是否可重试）
+            node: Tool node configuration
+            retry_count: Current retry count (used to determine if retry is allowed)
         """
         call = node.get("call", {})
         name = call.get("name")
@@ -466,7 +466,7 @@ class NodeExecutor:
         write_to = node.get("write_to")
         effect = node.get("effect", "read")
 
-        # 解析参数
+        # Parse arguments
         args = {}
         for key, value in args_dict.items():
             if isinstance(value, dict) and "$path" in value:
@@ -475,7 +475,7 @@ class NodeExecutor:
                 value = PathResolver.get(self.state, value)
             args[key] = value
 
-        # 调用工具
+        # Call tool
         result = None
         error = None
         if name in self.tools:
@@ -492,38 +492,38 @@ class NodeExecutor:
             error = f"Tool {name} not found"
             logging.warning(f"Tool {name} not registered")
 
-        # 处理错误和重试
+        # Handle errors and retries
         if error:
-            # 检查是否可以重试（13.2 节规则）
+            # Check if retry is allowed (Section 13.2 rules)
             if self.can_retry(node, retry_count):
-                # 重试次数限制（可在策略中配置）
+                # Retry count limit (configurable in policy)
                 max_retries = 3
                 if retry_count < max_retries:
-                    # 简单指数退避
+                    # Simple exponential backoff
                     import time
 
                     time.sleep(0.1 * (2**retry_count))
                     return self.execute_tool(node, retry_count + 1)
 
-            # 不可重试或已达到最大重试次数，返回错误结果
+            # Not retryable or max retries reached, return error result
             result = f"Error: {error}"
 
-        # 应用变更
+        # Apply changes
         if write_to:
             return ChangeSet(writes=[WriteOp(path=write_to, value=result)])
         return ChangeSet()
 
     def execute_join(self, node: Dict[str, Any]) -> Tuple[ChangeSet, Optional[str]]:
-        """执行 join 节点 (13.3)"""
+        """Execute join node (13.3)"""
         input_from = node.get("input_from")
         output_to = node.get("output_to")
         glossary = node.get("glossary")
 
-        # 读取输入
+        # Read input
         text = PathResolver.get(self.state, input_from) or ""
         text_str = str(text)
 
-        # 验证禁止项
+        # Validate forbidden items
         forbidden = None
         if glossary:
             for item in glossary:
@@ -533,7 +533,7 @@ class NodeExecutor:
                             forbidden = word
                             break
 
-        # 输出
+        # Output
         if output_to:
             cs = ChangeSet(writes=[WriteOp(path=output_to, value=text)])
         else:
@@ -542,24 +542,24 @@ class NodeExecutor:
         return cs, forbidden
 
     def execute_gate(self, node: Dict[str, Any]) -> Tuple[bool, List[str], List[str]]:
-        """执行 gate 节点 (13.4)"""
+        """Execute gate node (13.4)"""
         condition = node.get("condition", "")
         then = node.get("then", [])
         else_ = node.get("else", [])
 
-        # 求值条件
+        # Evaluate condition
         result = ConditionEvaluator.evaluate(condition, self.state)
 
         return result, then, else_
 
     def execute(self, node: Dict[str, Any]) -> Tuple[ChangeSet, Optional[str], Any]:
         """
-        执行单个节点
+        Execute single node
 
         Returns:
-            - changeset: 变更集
-            - forbidden: 禁止项（仅 join）
-            - gate_result: 门控结果（仅 gate）
+            - changeset: ChangeSet
+            - forbidden: Forbidden item (join only)
+            - gate_result: Gate result (gate only)
         """
         node_type = node.get("type")
 
@@ -579,12 +579,12 @@ class NodeExecutor:
 
 
 # ============================================================================
-# 依赖图 (对齐 LinJ.md 8)
+# Dependency Graph (aligned with LinJ.md 8)
 # ============================================================================
 
 
 class DependencyGraph:
-    """依赖图管理"""
+    """Dependency graph management"""
 
     def __init__(self, edges: List[Dict[str, Any]]):
         self.edges = edges
@@ -595,16 +595,16 @@ class DependencyGraph:
         self._build_graph()
 
     def _build_graph(self) -> None:
-        """构建依赖图"""
+        """Build dependency graph"""
         for edge in self.edges:
             from_node = edge.get("from")
             to_node = edge.get("to")
             kind = edge.get("kind", "data")
 
-            # 添加边
+            # Add edge
             self.edge_map[(from_node, to_node)] = edge
 
-            # 更新邻接表
+            # Update adjacency list
             if from_node not in self.adjacency:
                 self.adjacency[from_node] = []
             if to_node not in self.reverse_adj:
@@ -614,15 +614,15 @@ class DependencyGraph:
             self.reverse_adj[to_node].append(from_node)
 
     def get_dependencies(self, node_id: str) -> List[str]:
-        """获取节点的前置依赖"""
+        """Get prerequisites for node"""
         return self.reverse_adj.get(node_id, [])
 
     def get_dependents(self, node_id: str) -> List[str]:
-        """获取依赖该节点的节点"""
+        """Get nodes that depend on this node"""
         return self.adjacency.get(node_id, [])
 
     def get_incoming_edges(self, node_id: str) -> List[Dict[str, Any]]:
-        """获取进入该节点的所有边"""
+        """Get all edges entering this node"""
         result = []
         for edge in self.edges:
             if edge.get("to") == node_id:
@@ -631,12 +631,12 @@ class DependencyGraph:
 
 
 # ============================================================================
-# 决定性调度器 (对齐 LinJ.md 11.3)
+# Deterministic Scheduler (aligned with LinJ.md 11.3)
 # ============================================================================
 
 
 class DeterministicScheduler:
-    """决定性调度器 - 11.3 节"""
+    """Deterministic scheduler - 11.3"""
 
     def __init__(self, nodes: List[Dict[str, Any]], dependency_graph: DependencyGraph):
         self.nodes = nodes
@@ -646,12 +646,12 @@ class DeterministicScheduler:
         self.executed_steps: List[Dict[str, Any]] = []
 
     def are_dependencies_satisfied(self, node_id: str, completed: Set[str]) -> bool:
-        """检查依赖是否满足"""
+        """Check if dependencies are satisfied"""
         deps = self.dependency_graph.get_dependencies(node_id)
         return all(dep in completed for dep in deps)
 
     def get_ready_nodes(self, completed: Set[str]) -> List[Dict[str, Any]]:
-        """获取所有就绪的节点"""
+        """Get all ready nodes"""
         ready = []
         for node in self.nodes:
             node_id = node.get("id")
@@ -665,22 +665,22 @@ class DeterministicScheduler:
         self, ready_nodes: List[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
         """
-        选择下一个执行的节点
+        Select next node to execute
 
-        决定性顺序 (11.3):
-        1. rank 较大者优先（未提供视为 0）
-        2. nodes 数组中靠前者优先
-        3. 若仍相同，按 node_id 字典序
+        Deterministic order (11.3):
+        rank first ( 1. Highertreat missing as 0)
+        2. Earlier in nodes array first
+        3. If still same, sort by node_id lexicographically
         """
         if not ready_nodes:
             return None
 
-        # 排序
+        # Sort
         ready_nodes.sort(
             key=lambda n: (
                 n.get("rank", 0) or 0,  # rank
-                self.nodes.index(n),  # nodes 数组顺序
-                n.get("id", ""),  # node_id 字典序
+                self.nodes.index(n),  # nodes array order
+                n.get("id", ""),  # node_id lexicographic order
             ),
             reverse=True,
         )
@@ -691,24 +691,24 @@ class DeterministicScheduler:
         self, node_a: Dict[str, Any], node_b: Dict[str, Any]
     ) -> bool:
         """
-        检查两节点是否可以并发执行 (11.5)
+        Check if two nodes can execute concurrently (11.5)
 
-        要求:
-        - 写入集合互不相交
-        - 读取集合不得与对方写入集合相交
+        Requirements:
+        - Write sets must be disjoint
+        - Read sets must not intersect with other's write sets
         """
         reads_a = set(node_a.get("reads", []) or [])
         writes_a = set(node_a.get("writes", []) or [])
         reads_b = set(node_b.get("reads", []) or [])
         writes_b = set(node_b.get("writes", []) or [])
 
-        # 写入集合必须不相交
+        # Write sets must be disjoint
         for path_a in writes_a:
             for path_b in writes_b:
                 if PathResolver.intersect(path_a, path_b):
                     return False
 
-        # 读取不得与对方写入相交
+        # Reads must not intersect with other's writes
         for path_r in reads_a:
             for path_w in writes_b:
                 if PathResolver.intersect(path_r, path_w):
@@ -723,13 +723,13 @@ class DeterministicScheduler:
 
 
 # ============================================================================
-# 信号系统 (对齐 LinJ.md 21)
+# Signal System (aligned with LinJ.md 21)
 # ============================================================================
 
 
 @dataclass
 class Signal:
-    """信号结构 (21.1 节)"""
+    """Signal structure (21.1)"""
 
     name: str
     payload: Any = None
@@ -738,14 +738,14 @@ class Signal:
 
 @dataclass
 class WaitCondition:
-    """等待条件 (21.2 节)"""
+    """Wait condition (21.2)"""
 
     name: Optional[str] = None
     correlation: Optional[str] = None
     predicate: Optional[str] = None
 
     def matches(self, signal: Signal, state: Dict[str, Any]) -> bool:
-        """检查信号是否匹配等待条件"""
+        """Check if signal matches wait condition"""
         if self.name and signal.name != self.name:
             return False
         if self.correlation and signal.correlation != self.correlation:
@@ -758,7 +758,7 @@ class WaitCondition:
 
 
 class SignalQueue:
-    """信号队列"""
+    """Signal queue"""
 
     def __init__(self):
         self._signals: List[Signal] = []
@@ -784,12 +784,12 @@ class SignalQueue:
 
 
 # ============================================================================
-# LangGraph 后端实现 (完整对齐)
+# LangGraph Backend Implementation (complete alignment)
 # ============================================================================
 
 
 class BaseBackend:
-    """后端基类"""
+    """Backend base class"""
 
     def __init__(
         self, enable_tracing: bool = True, config: Optional[Dict[str, Any]] = None
@@ -803,7 +803,7 @@ class BaseBackend:
             self._setup_logging()
 
     def _setup_logging(self) -> None:
-        """配置日志"""
+        """Configure logging"""
         self._tracer = logging.getLogger("linj.langgraph")
         self._tracer.setLevel(logging.INFO)
         if not self._tracer.handlers:
@@ -816,11 +816,11 @@ class BaseBackend:
             self._tracer.addHandler(handler)
 
     def register_tool(self, name: str, func: Callable) -> None:
-        """注册工具函数"""
+        """Register tool function"""
         self._tools[name] = func
 
     def register_tools(self, tools: Dict[str, Callable]) -> None:
-        """批量注册工具"""
+        """Batch register tools"""
         self._tools.update(tools)
 
     async def run(
@@ -829,7 +829,7 @@ class BaseBackend:
         initial_state: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """执行工作流（子类必须实现）"""
+        """Execute workflow (subclass must implement)"""
         raise NotImplementedError
 
     def run_sync(
@@ -838,13 +838,13 @@ class BaseBackend:
         initial_state: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """同步执行"""
+        """Synchronous execution"""
         return asyncio.run(self.run(document, initial_state, **kwargs))
 
 
 class AutoGenBackend(BaseBackend):
     """
-    AutoGen 后端 - 使用 linj_autogen.executor.runner.LinJExecutor
+    AutoGen backend - uses linj_autogen.executor.runner.LinJExecutor
     """
 
     async def run(
@@ -865,16 +865,16 @@ class AutoGenBackend(BaseBackend):
 
 class LangGraphBackend(BaseBackend):
     """
-    LangGraph 后端 - 完整对齐 LinJ.md 规范
+    LangGraph backend - complete alignment with LinJ.md specification
 
-    关键实现点:
-    - 决定性调度 (11.3)
-    - 状态路径 (5)
-    - 变更集原子性 (9.2)
-    - 节点类型 (13)
-    - 条件表达式 (14)
-    - 循环处理 (12)
-    - 并发安全 (11.5)
+    Key implementation points:
+    - Deterministic scheduling (11.3)
+    - State paths (5)
+    - ChangeSet atomicity (9.2)
+    - Node types (13)
+    - Condition expressions (14)
+    - Loop handling (12)
+    - Thread safety (11.5)
     """
 
     def __init__(
@@ -890,14 +890,14 @@ class LangGraphBackend(BaseBackend):
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        执行工作流
+        Execute workflow
 
         Args:
-            document: LinJ 文档
-            initial_state: 初始状态
+            document: LinJ document
+            initial_state: Initial state
 
         Returns:
-            最终状态
+            Final state
         """
         return await self._execute(document, initial_state or {})
 
@@ -908,13 +908,13 @@ class LangGraphBackend(BaseBackend):
         dependency_graph: DependencyGraph,
     ) -> bool:
         """
-        检查节点是否是循环入口节点
+        Check if node is loop entry node
 
-        循环入口节点：有边指向循环members，但自身不在循环内的节点
-        对于入口节点，使用OR语义检查依赖（只要有一个依赖满足即可）
+        Loop entry node: has edges pointing to loop members, but node itself is not in loop
+        For entry nodes, use OR semantics to check dependencies (only one dependency needs to be satisfied)
         """
         for loop_id, loop_state in loop_states.items():
-            # 检查是否有从循环外的节点指向该循环成员的边
+            # Check if there are edges from outside the loop to loop members
             for member_id in loop_state["members"]:
                 incoming = dependency_graph.get_incoming_edges(member_id)
                 for edge in incoming:
@@ -922,7 +922,7 @@ class LangGraphBackend(BaseBackend):
                         edge.get("from") if isinstance(edge, dict) else edge.from_
                     )
                     if from_node == node_id:
-                        # 检查该节点是否在循环内
+                        # Check if this node is in the loop
                         if node_id not in loop_state["members"]:
                             return True
         return False
@@ -936,44 +936,44 @@ class LangGraphBackend(BaseBackend):
         dependency_graph: DependencyGraph,
     ) -> bool:
         """
-        检查节点的依赖是否已满足
+        Check if node dependencies are satisfied
 
-        对于循环入口节点：使用OR语义（只要有一个依赖满足即可）
-        对于普通节点：使用AND语义（所有依赖都必须满足）
+        For loop entry nodes: use OR semantics (only one dependency needs to be satisfied)
+        For normal nodes: use AND semantics (all dependencies must be satisfied)
         """
         deps = dependency_graph.get_dependencies(node_id)
         if not deps:
             return True
 
-        # 判断是否是循环入口节点
+        # Check if it's a loop entry node
         is_loop_entry = self._is_loop_entry_node(node_id, loop_states, dependency_graph)
 
         if is_loop_entry:
-            # 循环入口节点：OR语义
+            # Loop entry node: OR semantics
             return any(dep in completed or dep in activated for dep in deps)
         else:
-            # 普通节点：AND语义
+            # Normal node: AND semantics
             return all(dep in completed or dep in activated for dep in deps)
 
         max_steps = policies.get("max_steps", 1000)
         max_rounds = policies.get("max_rounds", 100)
 
-        # 3. 构建依赖图
+        # 3. Build dependency graph
         dependency_graph = DependencyGraph(edges)
 
-        # 4. 创建调度器
+        # 4. Create scheduler
         scheduler = DeterministicScheduler(nodes, dependency_graph)
 
-        # 5. 初始化追踪和冲突检测
+        # 5. Initialize tracing and conflict detection
         trace = []
         step_id = 0
         current_round = 0
-        activated = set()  # 已激活的节点
-        completed = set()  # 已完成的节点
-        failed = set()  # 失败的节点
-        applied_changesets: List[ChangeSet] = []  # 已应用的变更集
+        activated = set()  # Activated nodes
+        completed = set()  # Completed nodes
+        failed = set()  # Failed nodes
+        applied_changesets: List[ChangeSet] = []  # Applied ChangeSets
 
-        # 初始化循环状态
+        # Initialize loop states
         loop_states = {}
         for loop in loops:
             loop_states[loop["id"]] = {
@@ -988,61 +988,61 @@ class LangGraphBackend(BaseBackend):
             f"Starting workflow execution: {len(nodes)} nodes, {len(edges)} edges"
         )
 
-        # 6. 主执行循环
+        # 6. Main execution loop
         while current_round < max_rounds and step_id < max_steps:
             round_ready = set()
 
-            # 6.1 收集就绪节点
+            # 6.1 Collect ready nodes
             for node in nodes:
                 node_id = node.get("id")
                 if node_id in completed or node_id in failed or node_id in activated:
                     continue
 
-                # 检查依赖（支持循环入口节点的OR语义）
+                # Check dependencies (support OR semantics for loop entry nodes)
                 if not self._check_dependencies_satisfied(
                     node_id, completed, activated, loop_states, dependency_graph
                 ):
                     continue
 
-                # 检查循环成员限制
+                # Check loop member limits
                 in_loop = False
                 for loop_id, loop_state in loop_states.items():
                     if node_id in loop_state["members"]:
                         in_loop = True
                         if node_id in loop_state["executed"]:
-                            # 同一轮内不重复执行
+                            # Don't execute again in same round
                             continue
-                        # 在循环内，检查 round 限制
+                        # Inside loop, check round limit
                         if loop_state["current_round"] >= loop_state["max_rounds"]:
                             continue
 
                 round_ready.add(node)
 
             if not round_ready:
-                # 没有就绪节点，检查是否可以推进
+                # No ready nodes, check if we can advance
                 can_advance = False
                 for loop_id, loop_state in loop_states.items():
                     if loop_state["executed"]:
-                        # 循环前进
+                        # Loop advances
                         loop_state["current_round"] += 1
                         loop_state["executed"].clear()
                         can_advance = True
 
                 if not can_advance:
-                    # 工作流完成
+                    # Workflow complete
                     break
                 else:
                     current_round += 1
                     continue
 
-            # 6.2 决定性选择节点 (11.3)
+            # 6.2 Deterministic node selection (11.3)
             ready_list = list(round_ready)
             ready_list.sort(
                 key=lambda n: (n.get("rank", 0) or 0, nodes.index(n), n.get("id", "")),
                 reverse=True,
             )
 
-            # 6.3 顺序执行（保证决定性）
+            # 6.3 Sequential execution (guarantees determinism)
             for node in ready_list:
                 if step_id >= max_steps:
                     break
@@ -1055,17 +1055,17 @@ class LangGraphBackend(BaseBackend):
                 )
 
                 try:
-                    # 执行节点
+                    # Execute node
                     executor = NodeExecutor(self._tools, state)
                     changeset, forbidden, gate_result = executor.execute(node)
 
-                    # 检查 join 的禁止项
+                    # Check join forbidden items
                     if forbidden:
                         raise ValueError(f"Forbidden term found: {forbidden}")
 
-                    # 应用变更集 (9.2 原子性)
+                    # Apply ChangeSet (9.2 atomicity)
                     if not changeset.is_empty():
-                        # 冲突检测 (22.1 节：拒绝策略)
+                        # Conflict detection (22.1: rejection policy)
                         conflict = False
                         for prev_cs in applied_changesets:
                             if changeset.intersects_with(prev_cs):
@@ -1073,17 +1073,17 @@ class LangGraphBackend(BaseBackend):
                                 break
 
                         if conflict:
-                            # 冲突产生错误
+                            # Conflict produces error
                             raise ValueError(
                                 f"ConflictError: changeset for node {node_id} at step {step_id} "
                                 f"intersects with previously applied changesets"
                             )
 
-                        # 无冲突，应用变更集
+                        # No conflict, apply ChangeSet
                         changeset.apply_to(state)
                         applied_changesets.append(changeset)
 
-                    # 记录追踪 (27)
+                    # Record trace (27)
                     trace.append(
                         {
                             "step_id": step_id,
@@ -1094,7 +1094,7 @@ class LangGraphBackend(BaseBackend):
                         }
                     )
 
-                    # 更新循环状态
+                    # Update loop states
                     for loop_id, loop_state in loop_states.items():
                         if node_id in loop_state["members"]:
                             loop_state["executed"].add(node_id)
@@ -1102,7 +1102,7 @@ class LangGraphBackend(BaseBackend):
                     activated.add(node_id)
                     step_id += 1
 
-                    # 处理 gate 激活
+                    # Handle gate activation
                     if node_type == "gate" and gate_result:
                         condition_met, then_nodes, else_nodes = gate_result
                         target_nodes = then_nodes if condition_met else else_nodes
@@ -1124,13 +1124,13 @@ class LangGraphBackend(BaseBackend):
                     failed.add(node_id)
                     step_id += 1
 
-            # 6.4 完成本轮激活的节点
+            # 6.4 Complete this round's activated nodes
             completed.update(activated)
             activated.clear()
 
             current_round += 1
 
-        # 7. 添加追踪信息到状态
+        # 7. Add trace information to state
         state["$.trace"] = trace
         state["$.execution_stats"] = {
             "total_steps": step_id,
@@ -1153,15 +1153,15 @@ def create_backend(
     config: Optional[Dict[str, Any]] = None,
 ) -> BaseBackend:
     """
-    创建指定类型的后端执行器
+    Create backend executor of specified type
 
     Args:
-        backend_type: "autogen" 或 "langgraph"
-        enable_tracing: 是否启用追踪
-        config: 可选配置
+        backend_type: "autogen" or "langgraph"
+        enable_tracing: Whether to enable tracing
+        config: Optional configuration
 
     Returns:
-        后端执行器实例
+        Backend executor instance
     """
     backend_type = backend_type.lower()
 
@@ -1173,13 +1173,13 @@ def create_backend(
 
 def load_document(path: str) -> Dict[str, Any]:
     """
-    加载 YAML 格式的 LinJ 文档
+    Load YAML format LinJ document
 
     Args:
-        path: YAML 文件路径
+        path: YAML file path
 
     Returns:
-        解析后的文档对象
+        Parsed document object
     """
     import yaml
 
@@ -1194,7 +1194,7 @@ async def run_workflow(
     backend_type: str = "autogen",
     enable_tracing: bool = True,
 ) -> Dict[str, Any]:
-    """便捷的工作流执行函数"""
+    """Convenient workflow execution function"""
     doc = load_document(yaml_path)
 
     backend = create_backend(backend_type=backend_type, enable_tracing=enable_tracing)
@@ -1210,7 +1210,7 @@ def run_workflow_sync(
     backend_type: str = "autogen",
     enable_tracing: bool = True,
 ) -> Dict[str, Any]:
-    """同步版本的工作流执行函数"""
+    """Synchronous version of workflow execution function"""
     return asyncio.run(
         run_workflow(
             yaml_path,
@@ -1222,7 +1222,7 @@ def run_workflow_sync(
     )
 
 
-# 导出公共接口
+# Export public interfaces
 __all__ = [
     "PathResolver",
     "ChangeSet",

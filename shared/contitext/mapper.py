@@ -1,12 +1,12 @@
 """
-LinJ 到 ContiText 的映射执行器
+LinJ to ContiText Mapper
 
-实现 LinJ 规范第 23-26 节定义的 LinJ ↔ ContiText 映射：
-- LinJ 运行对应主续体
-- step_id 决定性分配
-- 变更集决定性提交
-- 资源域约束映射
-框架无关的映射器实现
+Implements LinJ ↔ ContiText mapping defined in LinJ specification sections 23-26:
+- LinJ execution corresponds to main continuation
+- step_id deterministic allocation
+- changeset deterministic commit
+- Resource domain constraint mapping
+Framework-agnostic mapper implementation
 """
 
 import asyncio
@@ -17,7 +17,7 @@ from .engine import ContiTextEngine, ChangeSet
 from .continuation import Continuation, Status, StateManager
 from .signal import Signal, WaitCondition
 
-# 导入依赖图
+# Import dependency graph
 from ..core.edges import DependencyGraph, EdgeKind
 
 logger = logging.getLogger(__name__)
@@ -25,78 +25,78 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class LinJDocument(Protocol):
-    """LinJ 文档协议，用于框架无关的文档操作"""
+    """LinJ document protocol for framework-agnostic document operations"""
 
     @property
     def linj_version(self) -> str:
-        """LinJ 版本"""
+        """LinJ version"""
         ...
 
     @property
     def nodes(self) -> List[Any]:
-        """节点列表"""
+        """Node list"""
         ...
 
     @property
     def edges(self) -> List[Any]:
-        """依赖边列表"""
+        """Dependency edge list"""
         ...
 
     @property
     def policies(self) -> Optional[Any]:
-        """执行策略"""
+        """Execution policies"""
         ...
 
 
 @runtime_checkable
 class Node(Protocol):
-    """节点协议，用于框架无关的节点操作"""
+    """Node protocol for framework-agnostic node operations"""
 
     @property
     def id(self) -> str:
-        """节点 ID"""
+        """Node ID"""
         ...
 
     @property
     def policy(self) -> Optional[Any]:
-        """节点策略"""
+        """Node policy"""
         ...
 
 
 @runtime_checkable
 class DeterministicScheduler(Protocol):
-    """决定性调度器协议"""
+    """Deterministic scheduler protocol"""
 
     def select_from_ready(self, ready_nodes: List[Node]) -> Optional[Node]:
-        """从就绪节点中选择一个节点执行"""
+        """Select a node from ready nodes for execution"""
         ...
 
     def allocate_step_id(self) -> int:
-        """分配步骤 ID"""
+        """Allocate step ID"""
         ...
 
     def mark_completed(self, node_id: str) -> None:
-        """标记节点已完成"""
+        """Mark node as completed"""
         ...
 
 
 @runtime_checkable
 class LinJExecutor(Protocol):
-    """LinJ 执行器协议"""
+    """LinJ executor protocol"""
 
     async def execute_node(
         self, node: Node, state_manager: StateManager, document: LinJDocument
     ) -> Any:
-        """执行单个节点"""
+        """Execute a single node"""
         ...
 
 
 class LinJToContiTextMapper:
     """
-    LinJ 到 ContiText 映射器
+    LinJ to ContiText Mapper
 
-    实现 23-26 节的映射规则，确保串行/并行执行一致性
-    框架无关的映射器实现
+    Implements mapping rules for sections 23-26, ensuring serial/parallel execution consistency
+    Framework-agnostic mapper implementation
     """
 
     def __init__(
@@ -107,13 +107,13 @@ class LinJToContiTextMapper:
         executor: Optional[LinJExecutor] = None,
     ):
         """
-        初始化映射器
+        Initialize mapper
 
         Args:
-            document: LinJ 文档
-            state_manager: 状态管理器
-            scheduler: 决定性调度器
-            executor: LinJ 执行器
+            document: LinJ document
+            state_manager: State manager
+            scheduler: Deterministic scheduler
+            executor: LinJ executor
         """
         self.document = document
         self.state_manager = state_manager or self._create_default_state_manager()
@@ -121,7 +121,7 @@ class LinJToContiTextMapper:
         self.scheduler = scheduler or self._create_default_scheduler()
         self.executor = executor or self._create_default_executor()
 
-        # 映射状态
+        # Mapping state
         self.execution_state = self._create_default_execution_state()
         self.current_round = 0
 
@@ -130,7 +130,7 @@ class LinJToContiTextMapper:
         )
 
     def _create_default_state_manager(self) -> StateManager:
-        """创建默认状态管理器"""
+        """Create default state manager"""
 
         class DefaultStateManager:
             def __init__(self):
@@ -144,7 +144,7 @@ class LinJToContiTextMapper:
                 return self._revision
 
             def apply(self, changeset: Any, step_id: Optional[int] = None) -> None:
-                # 简单的变更集应用逻辑
+                # Simple changeset application logic
                 if hasattr(changeset, "apply_to_state"):
                     self._state = changeset.apply_to_state(self._state)
                 elif isinstance(changeset, dict):
@@ -154,7 +154,7 @@ class LinJToContiTextMapper:
         return DefaultStateManager()
 
     def _create_default_scheduler(self) -> DeterministicScheduler:
-        """创建默认调度器"""
+        """Create default scheduler"""
 
         class DefaultScheduler:
             def __init__(self):
@@ -162,7 +162,7 @@ class LinJToContiTextMapper:
                 self._completed_nodes: Set[str] = set()
 
             def select_from_ready(self, ready_nodes: List[Node]) -> Optional[Node]:
-                # 简单的按 ID 字典序选择
+                # Simple selection by ID lexicographical order
                 if not ready_nodes:
                     return None
                 return min(ready_nodes, key=lambda n: n.id)
@@ -178,14 +178,14 @@ class LinJToContiTextMapper:
         return DefaultScheduler()
 
     def _create_default_executor(self) -> LinJExecutor:
-        """创建默认执行器"""
+        """Create default executor"""
 
         class DefaultExecutor:
             async def execute_node(
                 self, node: Node, state_manager: StateManager, document: LinJDocument
             ) -> Any:
-                # 简单的执行器，返回一个空结果
-                # 实际实现应该根据节点类型执行相应的逻辑
+                # Simple executor that returns an empty result
+                # Actual implementation should execute corresponding logic based on node type
                 result = type(
                     "NodeResult",
                     (),
@@ -196,7 +196,7 @@ class LinJToContiTextMapper:
         return DefaultExecutor()
 
     def _create_default_execution_state(self) -> Any:
-        """创建默认执行状态"""
+        """Create default execution state"""
 
         class DefaultExecutionState:
             def __init__(self):
@@ -212,32 +212,32 @@ class LinJToContiTextMapper:
         self, initial_state: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        执行 LinJ 文档（使用 ContiText）
+        Execute LinJ document (using ContiText)
 
-        实现底线目标：同一文档 + 同一初始状态 = 一致的最终主状态
+        Implements the bottom-line goal: same document + same initial state = consistent final main state
 
         Args:
-            initial_state: 初始状态
+            initial_state: Initial state
 
         Returns:
-            最终状态
+            Final state
         """
-        # 初始化状态
+        # Initialize state
         if initial_state:
             for key, value in initial_state.items():
                 changeset = {"set": {key: value}}
                 self.state_manager.apply(changeset)
 
-        # 验证资源约束（25 节）
+        # Validate resource constraints (section 25)
         self._validate_resource_constraints()
 
-        # 创建主续体（23 节）
+        # Create main continuation (section 23)
         main_continuation = self.contitext_engine.derive()
 
-        # 执行主循环
+        # Execute main loop
         await self._execution_loop(main_continuation)
 
-        # 处理所有待提交的变更集
+        # Process all pending changesets
         self.contitext_engine.process_pending_changes()
 
         logger.info("LinJ-ContiText execution completed successfully")
@@ -245,9 +245,9 @@ class LinJToContiTextMapper:
 
     async def _execution_loop(self, main_cont: Continuation) -> None:
         """
-        主执行循环
+        Main execution loop
 
-        使用 ContiText 续体执行 LinJ 节点
+        Execute LinJ nodes using Continuation views
         """
         max_rounds = (
             self.document.policies.max_rounds if self.document.policies else 1000
@@ -257,13 +257,13 @@ class LinJToContiTextMapper:
         step_count = 0
 
         while True:
-            # 获取就绪节点（考虑 round 和 allow_reenter）
+            # Get ready nodes (considering round and allow_reenter)
             ready_nodes = []
             for node in self.document.nodes:
                 if self.execution_state.is_terminal(node.id):
                     continue
 
-                # 简化的依赖检查（实际实现需要完整的依赖图）
+                # Simplified dependency check (actual implementation needs complete dependency graph)
                 dependencies_satisfied = self._check_dependencies_satisfied(node)
 
                 if not dependencies_satisfied:
@@ -292,25 +292,25 @@ class LinJToContiTextMapper:
                 await asyncio.sleep(0.01)
                 continue
 
-            # 按决定性顺序选择节点（11.3 节）
+            # Select node in deterministic order (section 11.3)
             node = self.scheduler.select_from_ready(ready_nodes)
             if not node:
                 break
 
-            # 检查步骤限制
+            # Check step limit
             step_count += 1
             if max_steps and step_count > max_steps:
                 raise RuntimeError(f"Exceeded max_steps: {max_steps}")
 
-            # 分配 step_id（24.3 节）
+            # Allocate step_id (section 24.3)
             step_id = self.scheduler.allocate_step_id()
 
-            # 创建续体视图（18.2 节）
+            # Create continuation view (section 18.2)
             view = self.contitext_engine.create_view(
                 main_cont, self._get_pending_changesets()
             )
 
-            # 执行节点（可能派生子续体）
+            # Execute node (may spawn child continuations)
             await self._execute_node_with_continuation(node, step_id, main_cont, view)
 
             executed_this_round.add(node.id)
@@ -319,17 +319,17 @@ class LinJToContiTextMapper:
         self, node: Node, step_id: int, parent_cont: Continuation, view: Any
     ) -> None:
         """
-        使用续体执行节点
+        Execute node using continuation
 
-        可以选择在主续体内执行，或派生子续体执行后合流
+        Can choose to execute within the main continuation, or spawn child continuations and then join
         """
         try:
-            # 简化实现：在主续体内直接执行
-            # 实际实现可以根据需要派生子续体
+            # Simplified implementation: execute directly within main continuation
+            # Actual implementation can spawn child continuations as needed
             result = await self._execute_node(node, view)
 
             if result.success:
-                # 提交变更集（20.2 节）
+                # Submit changeset (section 20.2)
                 if (
                     hasattr(result, "changeset")
                     and result.changeset
@@ -364,22 +364,22 @@ class LinJToContiTextMapper:
 
     async def _execute_node(self, node: Node, view: Any) -> Any:
         """
-        执行单个节点（使用视图）
+        Execute a single node (using view)
 
         Args:
-            node: 节点定义
-            view: 续体视图
+            node: Node definition
+            view: Continuation view
 
         Returns:
-            执行结果
+            Execution result
         """
-        # 将视图转换为状态管理器格式（临时）
+        # Convert view to state manager format (temporary)
         temp_state_manager = self._create_temp_state_manager(view)
 
         return await self.executor.execute_node(node, temp_state_manager, self.document)
 
     def _create_temp_state_manager(self, view: Any) -> StateManager:
-        """从视图创建临时状态管理器"""
+        """Create temporary state manager from view"""
 
         class TempStateManager:
             def __init__(self, view):
@@ -400,32 +400,32 @@ class LinJToContiTextMapper:
         return TempStateManager(view)
 
     def _is_changeset_empty(self, changeset: Any) -> bool:
-        """检查变更集是否为空"""
+        """Check if changeset is empty"""
         if hasattr(changeset, "is_empty"):
             return changeset.is_empty()
         return not changeset
 
     def _check_dependencies_satisfied(self, node: Node) -> bool:
         """
-        检查节点依赖是否满足 (11.1 节)
+        Check if node dependencies are satisfied (section 11.1)
 
-        节点的 data/control 前置依赖必须都已完成
-        只有当所有前置依赖节点都已成功完成时，节点才可执行
+        Node's data/control prerequisite dependencies must all be completed
+        Node is only executable when all prerequisite dependency nodes have completed successfully
 
         Args:
-            node: 节点对象
+            node: Node object
 
         Returns:
-            是否满足所有前置依赖
+            Whether all prerequisite dependencies are satisfied
         """
-        # 获取节点的所有入边
+        # Get all incoming edges for the node
         incoming_edges = self._get_dependency_graph().get_incoming(node.id)
 
         for edge in incoming_edges:
-            # 检查 data 和 control 依赖
+            # Check data and control dependencies
             if edge.kind in (EdgeKind.DATA, EdgeKind.CONTROL):
                 from_node_id = edge.from_
-                # 前置依赖节点必须已完成（成功或失败都算完成）
+                # Prerequisite dependency nodes must be completed (success or failure both count)
                 if not self.execution_state.is_terminal(from_node_id):
                     return False
 
@@ -433,52 +433,52 @@ class LinJToContiTextMapper:
 
     def _get_dependency_graph(self) -> DependencyGraph:
         """
-        获取依赖图（带缓存）
+        Get dependency graph (with caching)
 
         Returns:
-            依赖图对象
+            Dependency graph object
         """
         if not hasattr(self, "_dependency_graph"):
-            # 从文档构建依赖图
+            # Build dependency graph from document
             edges = getattr(self.document, "edges", [])
             self._dependency_graph = DependencyGraph(edges)
         return self._dependency_graph
 
     def _has_active_nodes(self) -> bool:
-        """检查是否有活跃节点"""
+        """Check if there are active nodes"""
         for node in self.document.nodes:
             if not self.execution_state.is_terminal(node.id):
                 return True
         return False
 
     def _get_pending_changesets(self) -> List[Any]:
-        """获取待提交的变更集列表"""
-        # 从 CommitManager 获取待处理变更集
+        """Get list of pending changesets to commit"""
+        # Get pending changesets from CommitManager
         pending = self.contitext_engine.get_commit_manager().get_pending()
         return [p.changeset for p in pending]
 
     def _validate_resource_constraints(self) -> None:
         """
-        验证资源域约束（25 节）
+        Validate resource domain constraints (section 25)
 
-        验证 placement 声明和 kind=resource 依赖是否可满足：
-        1. 检查 placement 声明是否有效（target 必须是节点 ID 或 resource_name）
-        2. 检查 kind=resource 依赖是否可满足（同域节点需在同一执行域）
-        3. 如果约束无法满足，必须产生 ValidationError
+        Validate that placement declarations and kind=resource dependencies are satisfiable:
+        1. Check if placement declarations are valid (target must be node ID or resource_name)
+        2. Check if kind=resource dependencies are satisfiable (nodes in same domain must be in same execution domain)
+        3. If constraints cannot be satisfied, must produce ValidationError
 
         Raises:
-            ResourceConstraintUnsatisfied: 资源约束无法满足时
+            ResourceConstraintUnsatisfied: When resource constraints cannot be satisfied
         """
         from ..exceptions.errors import ResourceConstraintUnsatisfied
 
-        # 获取 placement 和 edges
+        # Get placement and edges
         placement = getattr(self.document, "placement", None) or []
         edges = getattr(self.document, "edges", [])
 
-        # 构建节点 ID 集合
+        # Build node ID set
         node_ids = {node.id for node in self.document.nodes}
 
-        # 1. 验证 placement 声明
+        # 1. Validate placement declarations
         placement_domains: Dict[str, str] = {}  # target -> domain
 
         for p in placement:
@@ -488,17 +488,17 @@ class LinJToContiTextMapper:
             if not target or not domain:
                 continue
 
-            # 检查 target 是否有效
+            # Check if target is valid
             if target not in node_ids and not self._is_valid_resource_name(target):
-                # target 既不是节点 ID 也不是有效的 resource_name
-                # 根据规范，这应该产生 ValidationError
+                # Target is neither node ID nor valid resource_name
+                # According to specification, this should produce ValidationError
                 logger.warning(
                     f"Invalid placement target: {target}. "
                     f"Must be a node ID or valid resource_name."
                 )
                 continue
 
-            # 检查是否重复声明
+            # Check for duplicate declarations
             if target in placement_domains:
                 if placement_domains[target] != domain:
                     raise ResourceConstraintUnsatisfied(
@@ -508,7 +508,7 @@ class LinJToContiTextMapper:
             else:
                 placement_domains[target] = domain
 
-        # 2. 验证 kind=resource 依赖
+        # 2. Validate kind=resource dependencies
         resource_dependencies: Dict[str, List[str]] = {}  # node_id -> resource_names
 
         for edge in edges:
@@ -521,13 +521,13 @@ class LinJToContiTextMapper:
                         resource_dependencies[from_node] = []
                     resource_dependencies[from_node].append(resource_name)
 
-        # 3. 验证资源依赖的一致性
-        # 如果节点 A 通过 resource 依赖节点 B，且 B 有 placement 域声明
-        # 则 A 也必须属于同一域（或有同名的 resource_name）
+        # 3. Validate consistency of resource dependencies
+        # If node A depends on node B via resource dependency, and B has a placement domain declaration
+        # then A must belong to the same domain (or have same resource_name)
 
         for node_id, resources in resource_dependencies.items():
             for resource in resources:
-                # 检查是否有同名的 placement
+                # Check if there is a placement with same name
                 if resource in placement_domains:
                     node_domain = placement_domains.get(node_id)
                     resource_domain = placement_domains[resource]
@@ -539,7 +539,7 @@ class LinJToContiTextMapper:
                             f"have conflicting domain assignments"
                         )
 
-        # 4. 构建域映射（用于调度器使用）
+        # 4. Build domain mapping (for scheduler use)
         self._domain_map = self._build_domain_map(
             placement_domains, resource_dependencies
         )
@@ -550,11 +550,10 @@ class LinJToContiTextMapper:
         )
 
     def _is_valid_resource_name(self, name: str) -> bool:
-        """检查是否是有效的 resource_name"""
+        """Check if it's a valid resource_name"""
         if not name:
             return False
-        # resource_name 应该是一个非空字符串，不以 $ 开头
-        return isinstance(name, str) and name and not name.startswith("$")
+        return isinstance(name, str) and name[0] != "$"
 
     def _build_domain_map(
         self,
@@ -562,23 +561,23 @@ class LinJToContiTextMapper:
         resource_dependencies: Dict[str, List[str]],
     ) -> Dict[str, str]:
         """
-        构建域映射
+        Build domain mapping
 
         Args:
-            placement_domains: target -> domain 映射
-            resource_dependencies: node_id -> resource_names 映射
+            placement_domains: target -> domain mapping
+            resource_dependencies: node_id -> resource_names mapping
 
         Returns:
-            node_id -> domain 映射
+            node_id -> domain mapping
         """
         domain_map: Dict[str, str] = {}
 
-        # 首先添加 placement 声明的映射
+        # First add mappings from placement declarations
         for target, domain in placement_domains.items():
             if target in {node.id for node in self.document.nodes}:
                 domain_map[target] = domain
 
-        # 然后处理 resource 依赖（同 resource_name 的节点应在同一域）
+        # Then process resource dependencies (nodes with same resource_name should be in same domain)
         resource_to_nodes: Dict[str, List[str]] = {}
 
         for node_id, resources in resource_dependencies.items():
@@ -588,13 +587,13 @@ class LinJToContiTextMapper:
                 if node_id not in resource_to_nodes[resource]:
                     resource_to_nodes[resource].append(node_id)
 
-        # 为共享同一 resource 的节点分配相同域
+        # Assign same domain to nodes sharing the same resource
         for resource, nodes in resource_to_nodes.items():
             if len(nodes) > 1:
-                # 为这些节点创建共享域
+                # Create shared domain for these nodes
                 shared_domain = f"resource:{resource}"
                 for node_id in nodes:
-                    # 如果节点已有域声明且不匹配，记录警告
+                    # If node already has a domain declaration that doesn't match, log warning
                     if node_id in domain_map and domain_map[node_id] != shared_domain:
                         logger.warning(
                             f"Node '{node_id}' has explicit domain '{domain_map[node_id]}' "
@@ -608,13 +607,13 @@ class LinJToContiTextMapper:
 
     def get_node_domain(self, node_id: str) -> Optional[str]:
         """
-        获取节点的执行域
+        Get execution domain for node
 
         Args:
-            node_id: 节点 ID
+            node_id: Node ID
 
         Returns:
-            域标签，如果未指定则返回 None
+            Domain label, or None if not specified
         """
         if hasattr(self, "_domain_map"):
             return self._domain_map.get(node_id)
@@ -623,44 +622,44 @@ class LinJToContiTextMapper:
 
 class ParallelLinJExecutor(LinJToContiTextMapper):
     """
-    并行 LinJ 执行器
+    Parallel LinJ Executor
 
-    基于续体机制实现真正的并行执行
-    框架无关的并行执行器实现
+    Implements true parallel execution based on continuation mechanism
+    Framework-agnostic parallel executor implementation
     """
 
     async def execute_parallel(
         self, initial_state: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        并行执行 LinJ 文档
+        Execute LinJ document in parallel
 
-        使用续体和并发安全判定实现并行执行，同时保证一致性
+        Uses continuation and concurrency safety checking to achieve parallel execution while ensuring consistency
 
         Args:
-            initial_state: 初始状态
+            initial_state: Initial state
 
         Returns:
-            最终状态
+            Final state
         """
-        # 初始化状态
+        # Initialize state
         if initial_state:
             for key, value in initial_state.items():
                 changeset = {"set": {key: value}}
                 self.state_manager.apply(changeset)
 
-        # 验证资源约束
+        # Validate resource constraints
         self._validate_resource_constraints()
 
-        # 创建主续体
+        # Create main continuation
         main_continuation = self.contitext_engine.derive()
 
-        # 并行执行循环
-        domain_map = self._allocate_domains()  # 简化的域分配
+        # Parallel execution loop
+        domain_map = self._allocate_domains()  # Simplified domain allocation
 
         await self._parallel_execution_loop(main_continuation, domain_map)
 
-        # 处理所有待提交的变更集
+        # Process all pending changesets
         self.contitext_engine.process_pending_changes()
 
         logger.info("Parallel LinJ-ContiText execution completed successfully")
@@ -670,11 +669,11 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
         self, main_cont: Continuation, domain_map: Mapping[str, Any]
     ) -> None:
         """
-        并行执行循环
+        Parallel execution loop
 
-        1. 识别可安全并发的节点组（考虑数据冲突和域约束）
-        2. 为每组派生续体并行执行
-        3. 合流后继续下一组
+        1. Identify node groups that can be safely executed concurrently (considering data conflicts and domain constraints)
+        2. Derive continuations for each group and execute in parallel
+        3. Continue to next group after joining
         """
         max_rounds = (
             self.document.policies.max_rounds if self.document.policies else 1000
@@ -682,7 +681,7 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
         self.current_round = 0
 
         while True:
-            # 获取就绪节点
+            # Get ready nodes
             ready_nodes = self._get_ready_nodes()
 
             if not ready_nodes:
@@ -691,14 +690,14 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
                 await asyncio.sleep(0.01)
                 continue
 
-            # 分组为可安全并发的组 (11.5 节 & 25 节)
+            # Group into safely concurrent groups (section 11.5 & section 25)
             concurrent_groups = self._find_concurrent_groups(ready_nodes, domain_map)
 
-            # 并行执行每组
+            # Execute each group in parallel
             for group in concurrent_groups:
                 await self._execute_concurrent_group(group, main_cont)
 
-            # 轮次计数
+            # Round count
             self.current_round += 1
             if self.current_round > max_rounds:
                 raise RuntimeError(
@@ -709,25 +708,25 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
         self, nodes: List[Node], parent_cont: Continuation
     ) -> None:
         """
-        并行执行一组节点
+        Execute a group of nodes in parallel
 
         Args:
-            nodes: 可安全并发的节点组
-            parent_cont: 父续体
+            nodes: Group of nodes that can be safely executed concurrently
+            parent_cont: Parent continuation
         """
-        # 为每个节点派生子续体
+        # Spawn child continuation for each node
         child_continuations = []
         tasks = []
 
         for node in nodes:
-            # 分配 step_id（决定性顺序）
+            # Allocate step_id (deterministic order)
             step_id = self.scheduler.allocate_step_id()
 
-            # 派生子续体
+            # Spawn child continuation
             child_cont = self.contitext_engine.derive(parent_cont)
             child_continuations.append((node, child_cont, step_id))
 
-            # 创建视图并启动任务
+            # Create view and start task
             view = self.contitext_engine.create_view(
                 child_cont, self._get_pending_changesets()
             )
@@ -736,17 +735,17 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
             )
             tasks.append(task)
 
-        # 等待所有任务完成（合流）
+        # Wait for all tasks to complete (join)
         try:
             await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
             logger.error(f"Concurrent group execution failed: {e}")
             raise
 
-        # 标记所有节点为已完成
+        # Mark all nodes as completed
         for node, child_cont, step_id in child_continuations:
             if not self.execution_state.is_terminal(node.id):
-                # 根据续体状态更新执行状态
+                # Update execution state based on continuation status
                 if child_cont.status == Status.COMPLETED:
                     self.scheduler.mark_completed(node.id)
                     self.execution_state.completed.add(node.id)
@@ -755,7 +754,7 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
                     self.execution_state.failed.add(node.id)
 
     def _get_ready_nodes(self) -> List[Node]:
-        """获取就绪节点"""
+        """Get ready nodes"""
         ready = []
         for node in self.document.nodes:
             if not self.execution_state.is_terminal(
@@ -765,42 +764,42 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
         return ready
 
     def _allocate_domains(self) -> Mapping[str, Any]:
-        """分配资源域"""
-        # 简化的域分配实现
+        """Allocate resource domains"""
+        # Simplified domain allocation implementation
         return {}
 
     def _find_concurrent_groups(
         self, ready_nodes: List[Node], domain_map: Mapping[str, Any]
     ) -> List[List[Node]]:
         """
-        找到可安全并发的节点组 (11.5 节)
+        Find node groups that can be safely executed concurrently (section 11.5)
 
-        两个节点可以安全并行执行，当且仅当：
-        1. 它们声明的写入集合（writes）互不相交
-        2. 任一节点的读取集合（reads）不得与另一节点的写入集合相交
+        Two nodes can be safely executed in parallel if and only if:
+        1. Their declared write sets (writes) are disjoint
+        2. Neither node's read set (reads) intersects with the other node's write set
 
-        如果节点缺少 reads/writes 声明，则视为读取/写入整个主状态，
-        从而阻止与其他节点并发执行
+        If a node lacks reads/writes declarations, it's considered to read/write the entire main state,
+        thereby preventing concurrent execution with other nodes
 
         Args:
-            ready_nodes: 就绪节点列表
-            domain_map: 执行域映射
+            ready_nodes: List of ready nodes
+            domain_map: Execution domain mapping
 
         Returns:
-            可安全并发的节点组列表
+            List of node groups that can be safely executed concurrently
         """
         from ..core.path import PathResolver
 
         def get_node_reads(node: Node) -> List[str]:
-            """获取节点的读取路径列表"""
+            """Get list of paths that the node reads"""
             return getattr(node, "reads", None) or []
 
         def get_node_writes(node: Node) -> List[str]:
-            """获取节点的写入路径列表"""
+            """Get list of paths that the node writes"""
             return getattr(node, "writes", None) or []
 
         def paths_intersect(paths_a: List[str], paths_b: List[str]) -> bool:
-            """检查两组路径是否相交"""
+            """Check if two sets of paths intersect"""
             for pa in paths_a:
                 for pb in paths_b:
                     if PathResolver.intersect(pa, pb):
@@ -808,41 +807,41 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
             return False
 
         def can_run_parallel(node_a: Node, node_b: Node) -> bool:
-            """检查两个节点是否可以并行执行"""
+            """Check if two nodes can be executed in parallel"""
             reads_a = get_node_reads(node_a)
             writes_a = get_node_writes(node_a)
             reads_b = get_node_reads(node_b)
             writes_b = get_node_writes(node_b)
 
-            # 如果任一节点没有声明 reads/writes，视为访问整个状态
-            # 这会阻止与其他节点并发
+            # If either node doesn't declare reads/writes, consider it to access entire state
+            # This prevents concurrency with other nodes
             if not reads_a or not writes_a or not reads_b or not writes_b:
-                # 至少检查明确的声明是否相交
+                # At least check if explicit declarations intersect
                 if paths_intersect(writes_a, writes_b):
                     return False
                 return True
 
-            # 规则 1: 写入集合互不相交
+            # Rule 1: Write sets must be disjoint
             if paths_intersect(writes_a, writes_b):
                 return False
 
-            # 规则 2: reads_a 不与 writes_b 相交
+            # Rule 2: reads_a must not intersect with writes_b
             if paths_intersect(reads_a, writes_b):
                 return False
 
-            # 规则 3: reads_b 不与 writes_a 相交
+            # Rule 3: reads_b must not intersect with writes_a
             if paths_intersect(reads_b, writes_a):
                 return False
 
             return True
 
-        # 贪婪算法：尝试将节点放入现有组
+        # Greedy algorithm: try to put nodes into existing groups
         groups: List[List[Node]] = []
 
         for node in ready_nodes:
             placed = False
 
-            # 尝试放入现有组
+            # Try to put into existing groups
             for group in groups:
                 can_add = True
                 for member in group:
@@ -855,7 +854,7 @@ class ParallelLinJExecutor(LinJToContiTextMapper):
                     placed = True
                     break
 
-            # 如果无法放入现有组，创建新组
+            # If cannot put into existing group, create new group
             if not placed:
                 groups.append([node])
 

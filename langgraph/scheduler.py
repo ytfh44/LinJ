@@ -1,8 +1,8 @@
 """
-LangGraph决定性调度器
+LangGraph Deterministic Scheduler
 
-基于AutoGen实现迁移，确保与LinJ规范第11节完全一致
-提供与AutoGen版本完全相同的调度行为
+Based on AutoGen implementation migration, ensuring full compliance with LinJ specification Section 11
+Provides scheduling behavior identical to the AutoGen version
 """
 
 import logging
@@ -32,28 +32,28 @@ logger = logging.getLogger(__name__)
 
 class LangGraphDeterministicScheduler(DeterministicScheduler):
     """
-    LangGraph决定性调度器
+    LangGraph Deterministic Scheduler
 
-    与AutoGen版本保持完全一致的调度行为：
-    - 相同的决定性排序规则（11.3节）
-    - 相同的依赖检查逻辑
-    - 相同的并发安全检查
-    - 相同的执行域处理
+    Maintains identical scheduling behavior with the AutoGen version:
+    - Same deterministic sorting rules (Section 11.3)
+    - Same dependency checking logic
+    - Same concurrency safety checks
+    - Same execution domain handling
     """
 
     def __init__(self, nodes: List[Any], enable_parallel: bool = False):
         super().__init__(nodes)
         self.enable_parallel = enable_parallel
 
-        # 复用AutoGen的状态管理和域分配逻辑
+        # Reuse AutoGen's state management and domain allocation logic
         self._execution_state = ExecutionState()
         self._domain_allocator = DomainAllocator()
 
-        # 域映射缓存
+        # Domain mapping cache
         self._domain_map: Optional[Mapping[str, ExecutionDomain]] = None
 
     def _initialize_domain_map(self, document: Any) -> None:
-        """初始化执行域映射"""
+        """Initialize execution domain mapping"""
         if self._domain_map is None:
             try:
                 self._domain_map = self._domain_allocator.allocate_domains(
@@ -72,32 +72,32 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
         max_concurrency: Optional[int] = None,
     ) -> SchedulingDecision:
         """
-        选择节点执行（与AutoGen完全一致的逻辑）
+        Select nodes for execution (logic identical to AutoGen)
 
         Args:
-            ready_nodes: 就绪节点列表
-            context: 执行上下文（包含document等）
-            max_concurrency: 最大并发数限制
+            ready_nodes: List of ready nodes
+            context: Execution context (contains document, etc.)
+            max_concurrency: Maximum concurrency limit
 
         Returns:
-            调度决策结果
+            Scheduling decision result
         """
-        # 初始化域映射（如果需要）
+        # Initialize domain mapping (if needed)
         if hasattr(context, "document"):
             self._initialize_domain_map(context.document)
 
-        # 过滤可执行的节点
+        # Filter executable nodes
         executable_nodes = []
         executed_this_round = getattr(context, "executed_this_round", set())
 
         for node in ready_nodes:
             node_id = getattr(node, "id", "unknown")
 
-            # 检查是否已在执行中
+            # Check if already executing
             if self.is_executing(node_id):
                 continue
 
-            # 检查本轮是否已执行
+            # Check if already executed this round
             allow_reenter = getattr(node, "policy", None)
             allow_reenter = (
                 getattr(allow_reenter, "allow_reenter", False)
@@ -108,7 +108,7 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
             if node_id in executed_this_round and not allow_reenter:
                 continue
 
-            # 检查是否满足前置依赖
+            # Check if prerequisites are satisfied
             if not self._are_dependencies_satisfied(node_id, context):
                 continue
 
@@ -123,7 +123,7 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
                 metadata={"reason": "no_executable_nodes"},
             )
 
-        # 根据是否启用并行选择执行策略
+        # Select execution strategy based on whether parallel is enabled
         if self.enable_parallel and max_concurrency and max_concurrency > 1:
             return self._select_parallel_group(
                 executable_nodes, context, max_concurrency
@@ -134,12 +134,12 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
     def _select_single_node(
         self, executable_nodes: List[Any], context: Any
     ) -> SchedulingDecision:
-        """选择单个节点执行（串行模式）"""
-        # 按决定性规则排序（与AutoGen完全一致）
+        """Select single node for execution (serial mode)"""
+        # Sort by deterministic rules (identical to AutoGen)
         sorted_nodes = self._sort_deterministically(executable_nodes)
         selected_node = sorted_nodes[0]
 
-        # 记录批量大小
+        # Record batch size
         self._stats["batch_sizes"].append(1)
 
         return SchedulingDecision(
@@ -158,18 +158,18 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
     def _select_parallel_group(
         self, executable_nodes: List[Any], context: Any, max_concurrency: int
     ) -> SchedulingDecision:
-        """选择可并行执行的节点组"""
-        # 使用与AutoGen相同的并发分组逻辑
+        """Select group of nodes that can execute in parallel"""
+        # Use the same concurrent grouping logic as AutoGen
         concurrent_groups = find_concurrent_groups(executable_nodes, self._domain_map)
 
         if not concurrent_groups:
             return self._select_single_node(executable_nodes, context)
 
-        # 选择最大的可并行组（但不超过并发限制）
+        # Select the largest parallel group (but not exceeding concurrency limit)
         selected_group = concurrent_groups[0]
         selected_nodes = selected_group[:max_concurrency]
 
-        # 记录批量大小
+        # Record batch size
         self._stats["batch_sizes"].append(len(selected_nodes))
 
         return SchedulingDecision(
@@ -188,36 +188,36 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
         )
 
     def _are_dependencies_satisfied(self, node_id: str, context: Any) -> bool:
-        """检查节点的依赖是否已满足（与AutoGen完全一致）"""
-        # 获取依赖图和执行状态
+        """Check if node dependencies are satisfied (identical to AutoGen)"""
+        # Get dependency graph and execution state
         graph = getattr(context, "dependency_graph", None)
         if not graph:
             return True
 
-        # 使用与AutoGen相同的依赖检查逻辑
+        # Use the same dependency checking logic as AutoGen
         return are_dependencies_satisfied(node_id, graph, self._execution_state)
 
     def get_dependencies(self, node: Any) -> List[str]:
-        """获取节点的依赖列表"""
+        """Get node's dependency list"""
         return getattr(node, "dependencies", [])
 
     def can_execute(self, node: Any, context: Any) -> bool:
         """
-        检查节点是否可以执行（增强版）
+        Check if node can execute (enhanced version)
 
-        包含域约束检查
+        Includes domain constraint checking
         """
         node_id = getattr(node, "id", "unknown")
 
-        # 基础检查
+        # Basic check
         if not super().can_execute(node, context):
             return False
 
-        # 域约束检查
+        # Domain constraint check
         if self._domain_map and node_id in self._domain_map:
             node_domain = self._domain_map[node_id]
 
-            # 检查同域内是否有节点正在执行
+            # Check if there are nodes executing in the same domain
             for executing_id in self._executing:
                 if executing_id in self._domain_map:
                     executing_domain = self._domain_map[executing_id]
@@ -227,23 +227,23 @@ class LangGraphDeterministicScheduler(DeterministicScheduler):
         return True
 
     def mark_completed(self, node_id: str, success: bool = True) -> None:
-        """标记节点执行完成（更新执行状态）"""
+        """Mark node execution complete (update execution state)"""
         super().mark_completed(node_id, success)
 
-        # 更新执行状态
+        # Update execution state
         if success:
             self._execution_state.completed.add(node_id)
         else:
             self._execution_state.failed.add(node_id)
 
     def reset(self) -> None:
-        """重置调度器状态"""
+        """Reset scheduler state"""
         super().reset()
         self._execution_state = ExecutionState()
         self._domain_map = None
 
     def get_domain_info(self) -> Dict[str, Any]:
-        """获取执行域信息（用于调试）"""
+        """Get execution domain information (for debugging)"""
         if not self._domain_map:
             return {"domains": "not_initialized"}
 

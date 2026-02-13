@@ -1,7 +1,7 @@
 """
-LangGraph执行器适配器
+LangGraph Executor Adapter
 
-完整集成共享执行器组件，确保与AutoGen版本行为完全一致
+Fully integrates shared executor components, ensuring complete behavioral consistency with the AutoGen version
 """
 
 import logging
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class LangGraphExecutionContext:
-    """LangGraph执行上下文"""
+    """LangGraph execution context"""
 
     document: Any  # LinJDocument
     dependency_graph: Any  # DependencyGraph
@@ -35,13 +35,13 @@ class LangGraphExecutionContext:
 
 class LangGraphExecutorAdapter(adapter.BaseAdapter):
     """
-    LangGraph执行器适配器
+    LangGraph Executor Adapter
 
-    提供与AutoGen完全一致的执行行为：
-    - 相同的节点执行逻辑
-    - 相同的状态管理
-    - 相同的错误处理
-    - 相同的追踪记录
+    Provides execution behavior completely consistent with AutoGen:
+    - Same node execution logic
+    - Same state management
+    - Same error handling
+    - Same tracing records
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -55,7 +55,7 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
         strategy: str = "deterministic",
         enable_parallel: bool = False,
     ) -> scheduler.Scheduler:
-        """创建调度器"""
+        """Create scheduler"""
         if strategy == "deterministic":
             return LangGraphDeterministicScheduler(
                 nodes, enable_parallel=enable_parallel
@@ -70,7 +70,7 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
     def create_evaluator(
         self, config: Optional[Dict[str, Any]] = None
     ) -> evaluator.Evaluator:
-        """创建节点执行器"""
+        """Create node evaluator"""
         return evaluator.NodeEvaluator(config or {})
 
     def create_context(
@@ -79,11 +79,11 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
         state_manager: Any,
         backend: Any,
     ) -> context.ExecutionContext:
-        """创建执行上下文"""
-        # 构建依赖图
+        """Create execution context"""
+        # Build dependency graph
         dependency_graph = backend.DependencyGraph(document.edges)
 
-        # 创建调度器
+        # Create scheduler
         enable_parallel = (
             document.requirements.allow_parallel
             if hasattr(document.requirements, "allow_parallel")
@@ -93,7 +93,7 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
             document.nodes, strategy="deterministic", enable_parallel=enable_parallel
         )
 
-        # 创建执行器
+        # Create evaluator
         evaluator = self.create_evaluator(self._config)
 
         return LangGraphExecutionContext(
@@ -115,24 +115,24 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
         initial_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        执行工作流
+        Execute workflow
 
         Args:
-            document: LinJ文档对象
-            initial_state: 初始状态
+            document: LinJ document object
+            initial_state: Initial state
 
         Returns:
-            执行结果和最终状态
+            Execution result and final state
         """
         logger.info(f"Starting LangGraph workflow execution: {document.linj_version}")
 
-        # 初始化状态管理器
+        # Initialize state manager
         state_manager = backend.StateManager(initial_state or {})
 
-        # 创建执行上下文
+        # Create execution context
         exec_context = self.create_context(document, state_manager, None)
 
-        # 执行主循环
+        # Execute main loop
         result = self._execute_main_loop(document, exec_context, state_manager)
 
         logger.info("LangGraph workflow execution completed")
@@ -144,7 +144,7 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
         exec_context: LangGraphExecutionContext,
         state_manager: Any,
     ) -> Dict[str, Any]:
-        """执行主循环"""
+        """Execute main loop"""
         current_round = 0
         total_steps = 0
 
@@ -152,11 +152,11 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
             exec_context.executed_this_round.clear()
             round_steps = 0
 
-            # 找到所有可执行节点
+            # Find all executable nodes
             ready_nodes = self._find_ready_nodes(document, exec_context)
 
             if not ready_nodes:
-                # 检查是否有可推进的节点
+                # Check if there are nodes that can advance
                 if not self._can_advance(document, exec_context):
                     logger.info(f"Workflow completed at round {current_round}")
                     break
@@ -165,9 +165,9 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
                     current_round += 1
                     continue
 
-            # 执行节点
+            # Execute nodes
             while ready_nodes:
-                # 调度决策
+                # Scheduling decision
                 decision = exec_context.scheduler.select_nodes(
                     ready_nodes, exec_context
                 )
@@ -175,14 +175,14 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
                 if not decision.selected_nodes:
                     break
 
-                # 执行选中的节点
+                # Execute selected nodes
                 for node in decision.selected_nodes:
                     try:
                         step_result = self._execute_node(
                             node, exec_context, state_manager
                         )
 
-                        # 标记节点完成
+                        # Mark node as completed
                         exec_context.scheduler.mark_completed(
                             getattr(node, "id", "unknown"), step_result.success
                         )
@@ -199,12 +199,12 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
                             getattr(node, "id", "unknown"), False
                         )
 
-                # 更新就绪节点列表
+                # Update ready nodes list
                 ready_nodes = self._find_ready_nodes(document, exec_context)
 
             current_round += 1
 
-            # 检查步骤限制
+            # Check step limit
             if (
                 document.policies
                 and document.policies.max_steps
@@ -229,17 +229,17 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
     def _find_ready_nodes(
         self, document: Any, exec_context: LangGraphExecutionContext
     ) -> List[Any]:
-        """找到所有就绪的节点"""
+        """Find all ready nodes"""
         ready_nodes = []
 
         for node in document.nodes:
             node_id = getattr(node, "id", "unknown")
 
-            # 跳过已完成的节点
+            # Skip completed nodes
             if exec_context._execution_state.is_terminal(node_id):
                 continue
 
-            # 检查依赖是否满足
+            # Check if dependencies are satisfied
             if are_dependencies_satisfied(
                 node_id, exec_context.dependency_graph, exec_context._execution_state
             ):
@@ -250,8 +250,8 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
     def _can_advance(
         self, document: Any, exec_context: LangGraphExecutionContext
     ) -> bool:
-        """检查工作流是否还能推进"""
-        # 检查是否还有未完成的节点
+        """Check if workflow can still advance"""
+        # Check if there are any incomplete nodes
         for node in document.nodes:
             node_id = getattr(node, "id", "unknown")
             if not exec_context._execution_state.is_terminal(node_id):
@@ -264,16 +264,16 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
         exec_context: LangGraphExecutionContext,
         state_manager: Any,
     ) -> Any:
-        """执行单个节点"""
+        """Execute single node"""
         node_id = getattr(node, "id", "unknown")
 
         logger.debug(f"Executing node: {node_id}")
 
-        # 创建节点状态视图
+        # Create node state view
         step_id = exec_context.scheduler.allocate_step_id()
         view = state_manager.create_view(step_id)
 
-        # 根据节点类型执行
+        # Execute based on node type
         node_type = getattr(node, "type", "unknown")
 
         if node_type == "hint":
@@ -288,20 +288,20 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
             raise ValueError(f"Unknown node type: {node_type}")
 
     def _execute_hint_node(self, node: Any, view: Any, state_manager: Any) -> Any:
-        """执行hint节点"""
+        """Execute hint node"""
         try:
-            # 渲染模板
+            # Render template
             state = view.get_full_state()
             rendered = node.render(state)
 
-            # 创建变更集
+            # Create changeset
             from ..core.changeset import ChangeSet
 
             changeset = ChangeSet(
                 writes=[{"path": node.write_to, "value": rendered}], deletes=[]
             )
 
-            # 应用变更
+            # Apply changes
             state_manager.apply(changeset)
 
             return type("Result", (), {"success": True, "output": rendered})
@@ -311,17 +311,17 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
             return type("Result", (), {"success": False, "error": str(e)})
 
     def _execute_tool_node(self, node: Any, view: Any, state_manager: Any) -> Any:
-        """执行tool节点"""
+        """Execute tool node"""
         try:
-            # 解析参数
+            # Parse arguments
             state = view.get_full_state()
             args = node.get_args(state)
 
-            # 执行工具（这里需要集成实际的工具系统）
-            # 暂时返回模拟结果
+            # Execute tool (actual tool system integration needed here)
+            # Returning simulated result for now
             result = f"Tool {node.call.name} executed with args: {args}"
 
-            # 创建变更集
+            # Create changeset
             if node.write_to:
                 from ..core.changeset import ChangeSet
 
@@ -337,17 +337,17 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
             return type("Result", (), {"success": False, "error": str(e)})
 
     def _execute_join_node(self, node: Any, view: Any, state_manager: Any) -> Any:
-        """执行join节点"""
+        """Execute join node"""
         try:
-            # 读取输入
+            # Read input
             input_text = view.read(node.input_from)
 
-            # 检查禁止项
+            # Check forbidden terms
             forbidden = node.validate_forbidden(str(input_text))
             if forbidden:
                 raise ValueError(f"Forbidden term found: {forbidden}")
 
-            # 写入输出（简单复制，实际可能需要更复杂的接合逻辑）
+            # Write output (simple copy, actual join logic may be more complex)
             from ..core.changeset import ChangeSet
 
             changeset = ChangeSet(
@@ -364,13 +364,13 @@ class LangGraphExecutorAdapter(adapter.BaseAdapter):
     def _execute_gate_node(
         self, node: Any, view: Any, exec_context: LangGraphExecutionContext
     ) -> Any:
-        """执行gate节点"""
+        """Execute gate node"""
         try:
-            # 评估条件
+            # Evaluate condition
             state = view.get_full_state()
             condition_result = node.evaluate(state)
 
-            # 获取下一步节点（这里仅记录结果，实际触发由调度器处理）
+            # Get next nodes (only recording result here, actual triggering handled by scheduler)
             next_nodes = node.get_next_nodes(state)
 
             return type(

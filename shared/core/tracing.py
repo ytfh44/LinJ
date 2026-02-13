@@ -1,12 +1,12 @@
 """
-诊断追踪系统
+Diagnostic Tracing System
 
-实现 27 节建议的追踪记录：
-- 执行日志
-- 性能监控
-- 冲突记录
+Implements Section 27's tracing recommendations:
+- Execution logs
+- Performance monitoring
+- Conflict recording
 
-以及 26 节建议的不可重放诊断记录：
+And Section 26's non-replayable diagnostic recording:
 - $.diagnostics.non_replayable
 """
 
@@ -23,7 +23,7 @@ from .path import PathResolver
 
 
 class LogLevel(str, Enum):
-    """日志级别"""
+    """Log level"""
 
     DEBUG = "debug"
     INFO = "info"
@@ -32,7 +32,7 @@ class LogLevel(str, Enum):
 
 
 class TraceEntry:
-    """追踪条目 (27 节)"""
+    """Trace entry (Section 27)"""
 
     def __init__(
         self,
@@ -70,7 +70,7 @@ class TraceEntry:
         writes: Optional[List[str]] = None,
         error: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """完成追踪条目"""
+        """Complete trace entry"""
         self.status = status
         self.ts_end_ms = int(time.time() * 1000)
         if writes:
@@ -79,13 +79,13 @@ class TraceEntry:
             self.error = error
 
     def duration_ms(self) -> Optional[int]:
-        """获取执行时长（毫秒）"""
+        """Get execution duration (milliseconds)"""
         if self.ts_end_ms is not None:
             return self.ts_end_ms - self.ts_start_ms
         return None
 
     def to_dict(self) -> Dict[str, Any]:
-        """将追踪条目转换为字典"""
+        """Convert trace entry to dictionary"""
         return {
             "step_id": self.step_id,
             "round": self.round,
@@ -105,7 +105,7 @@ class TraceEntry:
 
 
 class PerformanceMetrics:
-    """性能指标"""
+    """Performance metrics"""
 
     def __init__(self):
         self.total_steps = 0
@@ -117,25 +117,25 @@ class PerformanceMetrics:
         self.cache_misses = 0
 
     def add_step(self, duration_ms: int) -> None:
-        """添加步骤指标"""
+        """Add step metric"""
         self.total_steps += 1
         self.total_duration_ms += duration_ms
         self.average_step_duration_ms = self.total_duration_ms / self.total_steps
 
     def add_conflict(self) -> None:
-        """增加冲突计数"""
+        """Increase conflict count"""
         self.conflict_count += 1
 
     def add_cache_hit(self) -> None:
-        """增加缓存命中计数"""
+        """Increase cache hit count"""
         self.cache_hits += 1
 
     def add_cache_miss(self) -> None:
-        """增加缓存未命中计数"""
+        """Increase cache miss count"""
         self.cache_misses += 1
 
     def get_cache_hit_rate(self) -> float:
-        """获取缓存命中率"""
+        """Get cache hit rate"""
         total = self.cache_hits + self.cache_misses
         if total == 0:
             return 0.0
@@ -143,7 +143,7 @@ class PerformanceMetrics:
 
 
 class ConflictRecord:
-    """冲突记录 (22.2 节)"""
+    """Conflict record (Section 22.2)"""
 
     def __init__(
         self,
@@ -164,17 +164,17 @@ class ConflictRecord:
 
 class DiagnosticTracer:
     """
-    诊断追踪器
+    Diagnostic Tracer
 
-    实现 27 节建议的追踪记录功能
+    Implements Section 27's tracing functionality
     """
 
     def __init__(self, enable_detailed_logging: bool = True):
         """
-        初始化诊断追踪器
+        Initialize diagnostic tracer
 
         Args:
-            enable_detailed_logging: 是否启用详细日志
+            enable_detailed_logging: Whether to enable detailed logging
         """
         self.enable_detailed_logging = enable_detailed_logging
         self._traces: List[TraceEntry] = []
@@ -183,7 +183,7 @@ class DiagnosticTracer:
         self._current_step_id = 0
         self._current_round = 0
 
-        # 设置日志处理器
+        # Set up logging handler
         self.logger = logging.getLogger(f"{self.__class__.__name__}")
         if enable_detailed_logging:
             handler = logging.StreamHandler()
@@ -202,15 +202,15 @@ class DiagnosticTracer:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> TraceEntry:
         """
-        开始追踪步骤
+        Start tracing step
 
         Args:
-            node_id: 节点 ID
-            reads: 实际读取的路径
-            metadata: 额外元数据
+            node_id: Node ID
+            reads: Actual paths read
+            metadata: Additional metadata
 
         Returns:
-            追踪条目
+            Trace entry
         """
         self._current_step_id += 1
 
@@ -237,13 +237,13 @@ class DiagnosticTracer:
         error: Optional[Exception] = None,
     ) -> None:
         """
-        完成步骤追踪
+        Complete step tracing
 
         Args:
-            trace: 追踪条目
-            status: 完成状态
-            writes: 实际写入的路径
-            error: 错误信息
+            trace: Trace entry
+            status: Completion status
+            writes: Actual paths written
+            error: Error information
         """
         error_dict = None
         if error:
@@ -255,9 +255,10 @@ class DiagnosticTracer:
 
         trace.complete(status, writes, error_dict)
 
-        # 更新性能指标
-        if trace.duration_ms():
-            self._performance_metrics.add_step(trace.duration_ms())
+        # Update performance metrics
+        duration = trace.duration_ms()
+        if duration is not None:
+            self._performance_metrics.add_step(duration)
 
         if self.enable_detailed_logging:
             self.logger.debug(
@@ -268,7 +269,7 @@ class DiagnosticTracer:
                 self.logger.error(f"Step {trace.step_id} failed: {error}")
 
     def start_round(self) -> None:
-        """开始新轮次"""
+        """Start new round"""
         self._current_round += 1
 
         if self.enable_detailed_logging:
@@ -283,14 +284,14 @@ class DiagnosticTracer:
         selected_step_id: int,
     ) -> None:
         """
-        记录冲突 (22.2 节)
+        Record conflict (Section 22.2)
 
         Args:
-            step_id_a: 第一个步骤 ID
-            step_id_b: 第二个步骤 ID
-            paths: 相交路径
-            resolution: 解决方案
-            selected_step_id: 选中的步骤 ID
+            step_id_a: First step ID
+            step_id_b: Second step ID
+            paths: Intersecting paths
+            resolution: Resolution strategy
+            selected_step_id: Selected step ID
         """
         conflict = ConflictRecord(
             step_id_a=step_id_a,
@@ -310,30 +311,30 @@ class DiagnosticTracer:
             )
 
     def record_cache_operation(self, hit: bool) -> None:
-        """记录缓存操作"""
+        """Record cache operation"""
         if hit:
             self._performance_metrics.add_cache_hit()
         else:
             self._performance_metrics.add_cache_miss()
 
     def record_concurrent_group(self, node_count: int) -> None:
-        """记录并发组"""
+        """Record concurrent group"""
         self._performance_metrics.concurrent_groups += 1
 
         if self.enable_detailed_logging:
             self.logger.info(f"Concurrent group with {node_count} nodes")
 
     def get_trace_summary(self) -> Dict[str, Any]:
-        """获取追踪摘要"""
+        """Get trace summary"""
         if not self._traces:
             return {}
 
-        # 统计各状态的数量
+        # Count status distribution
         status_counts = {}
         for trace in self._traces:
             status_counts[trace.status] = status_counts.get(trace.status, 0) + 1
 
-        # 计算统计信息
+        # Calculate statistics
         successful_steps = sum(
             1 for trace in self._traces if trace.status in ("completed", "success")
         )
@@ -352,7 +353,10 @@ class DiagnosticTracer:
             "successful_steps": successful_steps,
             "failed_steps": failed_steps,
             "status_distribution": status_counts,
-            "average_duration_ms": sum(durations) / len(durations) if durations else 0,
+            "average_duration_ms": sum(d for d in durations if d is not None)
+            / len(durations)
+            if durations
+            else 0,
             "total_rounds": self._current_round,
             "performance_metrics": {
                 "total_steps": self._performance_metrics.total_steps,
@@ -365,21 +369,21 @@ class DiagnosticTracer:
         }
 
     def get_recent_traces(self, limit: int = 50) -> List[TraceEntry]:
-        """获取最近的追踪记录"""
+        """Get recent trace records"""
         return self._traces[-limit:]
 
     def get_conflicts(self) -> List[ConflictRecord]:
-        """获取所有冲突记录"""
+        """Get all conflict records"""
         return self._conflicts.copy()
 
     def export_to_state(self, state: Dict[str, Any]) -> None:
         """
-        导出追踪信息到状态 (27 节)
+        Export trace information to state (Section 27)
 
         Args:
-            state: 目标状态对象
+            state: Target state object
         """
-        # 按照 27 节建议，在主状态中维护 $.trace[]
+        # Per Section 27, maintain $.trace[] in the main state
         trace_data = {
             "steps": [
                 {
@@ -419,7 +423,7 @@ class DiagnosticTracer:
             self.logger.info(f"Exported {len(self._traces)} traces to state")
 
     def clear_traces(self) -> None:
-        """清除所有追踪记录"""
+        """Clear all trace records"""
         self._traces.clear()
         self._conflicts.clear()
         self._performance_metrics = PerformanceMetrics()
@@ -432,9 +436,9 @@ class DiagnosticTracer:
 
 class TracingMixin:
     """
-    追踪混入类
+    Tracing Mixin
 
-    为其他组件提供追踪能力的混入
+    Provides tracing capability to other components as a mixin
     """
 
     def __init__(self, *args, **kwargs):
@@ -442,13 +446,13 @@ class TracingMixin:
         self.tracer: Optional[DiagnosticTracer] = None
 
     def set_tracer(self, tracer: DiagnosticTracer) -> None:
-        """设置追踪器"""
+        """Set tracer"""
         self.tracer = tracer
 
     def trace_step_start(
         self, node_id: str, reads: Optional[List[str]] = None
     ) -> Optional[TraceEntry]:
-        """开始步骤追踪（如果设置了追踪器）"""
+        """Start step tracing (if tracer is set)"""
         if self.tracer:
             return self.tracer.start_step(node_id, reads)
         return None
@@ -460,7 +464,7 @@ class TracingMixin:
         writes: Optional[List[str]] = None,
         error: Optional[Exception] = None,
     ) -> None:
-        """完成步骤追踪（如果设置了追踪器）"""
+        """Complete step tracing (if tracer is set)"""
         if self.tracer and trace:
             self.tracer.complete_step(trace, status, writes, error)
 
@@ -472,7 +476,7 @@ class TracingMixin:
         resolution: str,
         selected_step_id: int,
     ) -> None:
-        """记录冲突（如果设置了追踪器）"""
+        """Record conflict (if tracer is set)"""
         if self.tracer:
             self.tracer.record_conflict(
                 step_id_a, step_id_b, paths, resolution, selected_step_id
@@ -481,12 +485,13 @@ class TracingMixin:
 
 class NonReplayableDiagnostic:
     """
-    不可重放诊断记录 (26 节)
+    Non-Replayable Diagnostic Record (Section 26)
 
-    当工具调用在恢复或重试时遇到外部不可重放（例如凭证失效、外部状态已变化）
-    导致无法满足一致性时，应在主状态写入诊断信息：
+    When a tool call encounters external non-replayable conditions during recovery or retry
+    (e.g., credential expiration, external state changed) that prevent consistency requirements
+    from being met, diagnostic information should be written to the main state:
 
-    `$.diagnostics.non_replayable`: 对象，至少包含 node_id, tool_name, reason, at_step_id
+    `$.diagnostics.non_replayable`: Object, must contain node_id, tool_name, reason, at_step_id
     """
 
     def __init__(
@@ -521,9 +526,9 @@ class NonReplayableDiagnostic:
 
 class DiagnosticsRecorder:
     """
-    诊断记录器
+    Diagnostics Recorder
 
-    实现 26 节定义的不可重放诊断记录功能
+    Implements Section 26's non-replayable diagnostic recording functionality
     """
 
     def __init__(self, state_manager: Optional[Any] = None):
@@ -539,17 +544,17 @@ class DiagnosticsRecorder:
         details: Optional[Dict[str, Any]] = None,
     ) -> NonReplayableDiagnostic:
         """
-        记录不可重放诊断
+        Record non-replayable diagnostic
 
         Args:
-            node_id: 节点 ID
-            tool_name: 工具名称
-            reason: 失败原因
-            at_step_id: 步骤 ID
-            details: 额外详情
+            node_id: Node ID
+            tool_name: Tool name
+            reason: Failure reason
+            at_step_id: Step ID
+            details: Additional details
 
         Returns:
-            诊断记录
+            Diagnostic record
         """
         diagnostic = NonReplayableDiagnostic(
             node_id=node_id,
@@ -561,39 +566,39 @@ class DiagnosticsRecorder:
 
         self._diagnostics.append(diagnostic)
 
-        # 写入到状态（如果提供了状态管理器）
+        # Write to state (if state manager provided)
         if self._state_manager:
             self.write_to_state(self._state_manager.get_full_state())
 
         return diagnostic
 
     def get_diagnostics(self) -> List[NonReplayableDiagnostic]:
-        """获取所有诊断记录"""
+        """Get all diagnostic records"""
         return self._diagnostics.copy()
 
     def get_diagnostics_for_node(self, node_id: str) -> List[NonReplayableDiagnostic]:
-        """获取指定节点的诊断记录"""
+        """Get diagnostic records for specified node"""
         return [d for d in self._diagnostics if d.node_id == node_id]
 
     def clear(self) -> None:
-        """清除诊断记录"""
+        """Clear diagnostic records"""
         self._diagnostics.clear()
 
     def write_to_state(
         self, state: Dict[str, Any], path: str = "$.diagnostics.non_replayable"
     ) -> None:
         """
-        将诊断写入状态
+        Write diagnostics to state
 
         Args:
-            state: 目标状态字典
-            path: 诊断路径
+            state: Target state dictionary
+            path: Diagnostic path
         """
         diagnostic_list = [d.to_dict() for d in self._diagnostics]
         PathResolver.set(state, path, diagnostic_list)
 
     def get_summary(self) -> Dict[str, Any]:
-        """获取诊断摘要"""
+        """Get diagnostic summary"""
         return {
             "total_diagnostics": len(self._diagnostics),
             "by_node": self._group_by_node(),

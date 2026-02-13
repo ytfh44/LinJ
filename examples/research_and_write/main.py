@@ -1,18 +1,18 @@
 """
-研究写作流水线示例
+Research and Writing Pipeline Demo
 
-演示如何使用 LinJ 框架创建复杂的工作流：
-1. 研究阶段 (ToolNode)
-2. 生成草稿 (HintNode + ToolNode)
-3. 审计阶段 (ToolNode)
-4. 质量门控 (GateNode)
-5. 优化循环 (Loop)
-6. 术语检查 (JoinNode)
-7. 发布阶段 (ToolNode)
+Demonstrates how to create complex workflows using the LinJ framework:
+1. Research phase (ToolNode)
+2. Draft generation (HintNode + ToolNode)
+3. Audit phase (ToolNode)
+4. Quality gate (GateNode)
+5. Optimization loop (Loop)
+6. Terminology check (JoinNode)
+7. Publishing phase (ToolNode)
 
-支持两种后端：
-- AutoGen: 使用 linj_autogen.executor.runner
-- LangGraph: 使用 langgraph 模块
+Supports two backends:
+- AutoGen: uses linj_autogen.executor.runner
+- LangGraph: uses langgraph module
 """
 
 import asyncio
@@ -21,29 +21,29 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-# 添加项目根目录到 Python 路径
+# Add project root to Python path
 current_dir = Path(__file__).parent
 project_root = current_dir.parent.parent
 sys.path.insert(0, str(project_root))
 
-# 确保 autogen/src 在路径中
+# Ensure autogen/src is in path
 autogen_src = project_root / "autogen" / "src"
 if str(autogen_src) not in sys.path:
     sys.path.insert(0, str(autogen_src))
 
-# 导入工具函数
+# Import tool functions
 from tools import research_topic, audit_article, generic_llm, publish_result
 
 
 def get_backend(backend_type: str = "autogen"):
     """
-    获取指定类型的后端执行器
+    Get backend executor of specified type
 
     Args:
-        backend_type: "autogen" 或 "langgraph"
+        backend_type: "autogen" or "langgraph"
 
     Returns:
-        后端对象
+        Backend object
     """
     if backend_type.lower() == "langgraph":
         try:
@@ -60,7 +60,7 @@ def get_backend(backend_type: str = "autogen"):
 
 
 def get_load_document_func(backend_type: str):
-    """获取适合当前后端的 load_document 函数"""
+    """Get load_document function suitable for current backend"""
     if backend_type.lower() == "langgraph":
         try:
             from examples.langgraph_backend import load_document
@@ -76,47 +76,47 @@ def get_load_document_func(backend_type: str):
 
 async def main(backend_type: str = "autogen"):
     """
-    主函数
+    Main function
 
     Args:
-        backend_type: 要使用的后端类型
+        backend_type: Backend type to use
     """
     print("=== LinJ Complex Demo: Automated Research and Refinement Pipeline ===")
     print(f"Using backend: {backend_type}")
     print(f"Project root: {project_root}")
 
-    # 1. 加载文档
+    # 1. Load document
     yaml_path = current_dir / "workflow.yaml"
     load_document = get_load_document_func(backend_type)
     doc = load_document(str(yaml_path))
 
-    # 2. 初始化执行器
+    # 2. Initialize executor
     executor = get_backend(backend_type)
 
-    # 3. 注册工具
+    # 3. Register tools
     executor.register_tool("research_topic", research_topic)
     executor.register_tool("audit_article", audit_article)
     executor.register_tool("llm_call", generic_llm)
     executor.register_tool("publish_result", publish_result)
 
-    # 4. 初始状态
+    # 4. Initial state
     initial_state = {
         "input": {"topic": "The Future of Artificial Gravity in Space Exploration"}
     }
 
-    # 5. 运行
+    # 5. Run
     print(f"\n>> Starting execution for topic: {initial_state['input']['topic']}")
     try:
         final_state = await executor.run(doc, initial_state)
         print("\n>> Execution Completed Successfully!")
 
-        # 显示结果
+        # Display results
         score = final_state.get("audit_report", {}).get("score", "N/A")
         print(f">> Final Audit Score: {score}")
         publish_url = final_state.get("publish_result", {}).get("publish_url", "N/A")
         print(f">> Publish URL: {publish_url}")
 
-        # 显示最终内容预览
+        # Display final content preview
         final_content = final_state.get("final_content", "")
         print(
             f"\n>> Final Content Preview (first 200 chars):\n{final_content[:200]}..."
@@ -130,17 +130,17 @@ async def main(backend_type: str = "autogen"):
 
 
 def parse_args():
-    """解析命令行参数"""
+    """Parse command line arguments"""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="研究写作流水线示例",
+        description="Research and Writing Pipeline Demo",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  python main.py --backend autogen      # 使用 AutoGen 后端
-  python main.py --backend langgraph    # 使用 LangGraph 后端
-  python main.py --backend all          # 依次运行两个后端
+Examples:
+  python main.py --backend autogen      # Use AutoGen backend
+  python main.py --backend langgraph    # Use LangGraph backend
+  python main.py --backend all          # Run both backends sequentially
         """,
     )
 
@@ -148,7 +148,7 @@ def parse_args():
         "--backend",
         choices=["autogen", "langgraph", "all"],
         default="autogen",
-        help="选择后端类型 (默认: autogen)",
+        help="Select backend type (default: autogen)",
     )
 
     return parser.parse_args()

@@ -1,18 +1,19 @@
 """
-条件表达式求值器实现
+Condition expression evaluator implementation
 
-从autogen/executor/evaluator.py迁移并重构的求值器实现，兼容现有AutoGen求值逻辑。
+Evaluator implementation migrated and refactored from autogen/executor/evaluator.py,
+compatible with existing AutoGen evaluation logic.
 """
 
 import re
 from typing import Any, Dict, Optional, List
 
-# 尝试导入现有模块进行兼容
+# Try to import existing module for compatibility
 try:
     from ..core.path import PathResolver
-    from ..core.errors import ConditionError
+    from ..exceptions.errors import ConditionError
 except ImportError:
-    # 回退到基本实现
+    # Fallback to basic implementation
     PathResolver = Any
     ConditionError = Exception
 
@@ -27,36 +28,36 @@ from .evaluator import (
 
 class AutoGenConditionEvaluator(BaseEvaluator):
     """
-    AutoGen兼容的条件表达式求值器
+    AutoGen-compatible condition expression evaluator
 
-    实现 LinJ 规范 14 节定义的条件表达式语法：
-    - 比较：== != > >= < <=
-    - 逻辑：AND OR NOT（短路）
-    - 函数：exists(path), len(path), value(path)
+    Implements condition expression syntax defined in LinJ Specification Section 14:
+    - Comparison: == != > >= < <=
+    - Logic: AND OR NOT (short-circuit)
+    - Functions: exists(path), len(path), value(path)
     """
 
-    # 词法分析模式
+    # Lexical analysis pattern
     TOKEN_PATTERN = re.compile(
-        r"\s*("  # 可选空白
-        r"(?P<LPAREN>\()|"  # 左括号
-        r"(?P<RPAREN>\))|"  # 右括号
-        r"(?P<OP>==|!=|>=|<=|>|<)|"  # 比较运算符
-        r"(?P<LOGIC>AND|OR|NOT)|"  # 逻辑运算符
-        r"(?P<FUN>exists|len|value)\s*\(|"  # 函数调用
-        r"(?P<PATH>\$\.[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*|\[\d+\])*)|"  # 路径
-        r'(?P<STRING>"[^"]*")|'  # 字符串
-        r"(?P<NUMBER>-?\d+(?:\.\d+)?)|"  # 数字
+        r"\s*("  # Optional whitespace
+        r"(?P<LPAREN>\()|"  # Left parenthesis
+        r"(?P<RPAREN>\))|"  # Right parenthesis
+        r"(?P<OP>==|!=|>=|<=|>|<)|"  # Comparison operator
+        r"(?P<LOGIC>AND|OR|NOT)|"  # Logic operator
+        r"(?P<FUN>exists|len|value)\s*\(|"  # Function call
+        r"(?P<PATH>\$\.[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*|\[\d+\])*)|"  # Path
+        r'(?P<STRING>"[^"]*")|'  # String
+        r"(?P<NUMBER>-?\d+(?:\.\d+)?)|"  # Number
         r"(?P<NULL>null)|"  # null
-        r"(?P<BOOL>true|false)"  # 布尔值
+        r"(?P<BOOL>true|false)"  # Boolean
         r")"
     )
 
     def __init__(self, state: Dict[str, Any]):
         """
-        初始化求值器
+        Initialize the evaluator
 
         Args:
-            state: 主状态对象，用于路径求值
+            state: Main state object, used for path evaluation
         """
         super().__init__()
         self._state = state
@@ -66,25 +67,27 @@ class AutoGenConditionEvaluator(BaseEvaluator):
     def evaluate(
         self,
         expression: str,
-        context=None,  # 兼容原有接口
+        context=None,  # Compatible with original interface
         strategy: Optional[EvaluationStrategy] = None,
     ) -> EvaluationResult:
         """
-        求值条件表达式
+        Evaluate condition expression
 
         Args:
-            expression: 条件表达式字符串
-            context: 执行上下文（兼容性参数）
-            strategy: 求值策略
+            expression: Condition expression string
+            context: Execution context (compatibility parameter)
+            strategy: Evaluation strategy
 
         Returns:
-            求值结果
+            Evaluation result
 
         Raises:
-            ConditionError: 表达式语法错误或类型不匹配
+            ConditionError: Expression syntax error or type mismatch
         """
         if not expression or expression.strip() == "":
-            return EvaluationResult(success=True, value=True)  # 空条件视为真
+            return EvaluationResult(
+                success=True, value=True
+            )  # Empty condition is considered true
 
         self._tokens = self._tokenize(expression)
         self._pos = 0
@@ -101,11 +104,11 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             return EvaluationResult(success=False, error=e)
 
     def tokenize(self, expression: str) -> List[Token]:
-        """词法分析"""
+        """Lexical analysis"""
         return self._tokenize(expression)
 
     def _tokenize(self, condition: str) -> List[Token]:
-        """词法分析"""
+        """Lexical analysis"""
         tokens = []
         pos = 0
 
@@ -127,9 +130,9 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             elif match.group("LOGIC"):
                 token = Token(TokenType.LOGIC, match.group("LOGIC"))
             elif match.group("FUN"):
-                # 提取函数名和路径参数
+                # Extract function name and path argument
                 fun_name = match.group("FUN")
-                # 找到匹配的右括号
+                # Find matching right parenthesis
                 start = match.end()
                 depth = 1
                 end = start
@@ -156,7 +159,9 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             elif match.group("PATH"):
                 token = Token(TokenType.PATH, match.group("PATH"))
             elif match.group("STRING"):
-                token = Token(TokenType.STRING, match.group("STRING")[1:-1])  # 去掉引号
+                token = Token(
+                    TokenType.STRING, match.group("STRING")[1:-1]
+                )  # Remove quotes
             elif match.group("NUMBER"):
                 num_str = match.group("NUMBER")
                 if "." in num_str:
@@ -175,19 +180,19 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         return tokens
 
     def parse(self, tokens: List[Token]) -> Any:
-        """语法分析（简化实现）"""
+        """Syntax analysis (simplified implementation)"""
         self._tokens = tokens
         self._pos = 0
         return self._parse_or()
 
     def _current(self) -> Optional[Token]:
-        """获取当前 token"""
+        """Get current token"""
         if self._pos < len(self._tokens):
             return self._tokens[self._pos]
         return None
 
     def _consume(self, expected_type: Optional[TokenType] = None) -> Token:
-        """消费当前 token"""
+        """Consume current token"""
         token = self._current()
         if token is None:
             raise ConditionError("Unexpected end of expression")
@@ -199,7 +204,7 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         return token
 
     def _parse_or(self) -> bool:
-        """解析 OR 表达式（最低优先级）"""
+        """Parse OR expression (lowest precedence)"""
         left = self._parse_and()
 
         while (
@@ -208,8 +213,8 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             and self._current().value == "OR"
         ):
             self._consume(TokenType.LOGIC)
-            if left:  # 短路：如果左边为真，不需要求右边
-                # 消费右操作数但不求值
+            if left:  # Short-circuit: if left is true, no need to evaluate right
+                # Consume right operand but don't evaluate
                 self._parse_and()
                 return True
             left = self._parse_and()
@@ -217,7 +222,7 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         return left
 
     def _parse_and(self) -> bool:
-        """解析 AND 表达式"""
+        """Parse AND expression"""
         left = self._parse_not()
 
         while (
@@ -226,8 +231,8 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             and self._current().value == "AND"
         ):
             self._consume(TokenType.LOGIC)
-            if not left:  # 短路：如果左边为假，不需要求右边
-                # 消费右操作数但不求值
+            if not left:  # Short-circuit: if left is false, no need to evaluate right
+                # Consume right operand but don't evaluate
                 self._parse_not()
                 return False
             left = self._parse_not()
@@ -235,7 +240,7 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         return left
 
     def _parse_not(self) -> bool:
-        """解析 NOT 表达式"""
+        """Parse NOT expression"""
         if (
             self._current()
             and self._current().type == TokenType.LOGIC
@@ -247,30 +252,30 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         return self._parse_comparison()
 
     def _parse_comparison(self) -> bool:
-        """解析比较表达式"""
+        """Parse comparison expression"""
         left = self._parse_primary()
 
         if self._current() and self._current().type == TokenType.OPERATOR:
             op = self._consume(TokenType.OPERATOR).value
             right = self._parse_primary()
 
-            # null 处理：只有 == 和 != 有意义
+            # null handling: only == and != make sense
             if left is None or right is None:
                 if op == "==":
                     return left == right
                 elif op == "!=":
                     return left != right
                 else:
-                    # 14.2 节：null 参与其他比较结果为 false
+                    # Section 14.2: null participating in other comparisons results in false
                     return False
 
-            # 类型检查
+            # Type checking
             if type(left) != type(right):
                 raise ConditionError(
                     f"Type mismatch in comparison: {type(left).__name__} {op} {type(right).__name__}"
                 )
 
-            # 执行比较
+            # Perform comparison
             if op == "==":
                 return left == right
             elif op == "!=":
@@ -284,11 +289,11 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             elif op == "<=":
                 return left <= right
 
-        # 单个值视为布尔值
+        # Single value is treated as boolean
         return bool(left)
 
     def _parse_primary(self) -> Any:
-        """解析基本值"""
+        """Parse primary value"""
         token = self._current()
 
         if token is None:
@@ -323,19 +328,19 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         raise ConditionError(f"Unexpected token: {token}")
 
     def _eval_function(self, fun_spec: tuple) -> Any:
-        """求值函数调用"""
+        """Evaluate function call"""
         fun_name, path = fun_spec
-        self._pos += 1  # 消费 FUN token
+        self._pos += 1  # Consume FUN token
 
         if fun_name == "exists":
-            # exists(path): 路径存在且值非 null 为真
+            # exists(path): path exists and value is not null returns true
             if hasattr(PathResolver, "get"):
                 value = PathResolver.get(self._state, path)
                 return value is not None
             return False
 
         elif fun_name == "len":
-            # len(path): 数组长度；非数组或不存在则为 0
+            # len(path): array length; non-array or non-existent returns 0
             if hasattr(PathResolver, "get"):
                 value = PathResolver.get(self._state, path)
                 if isinstance(value, list):
@@ -343,7 +348,7 @@ class AutoGenConditionEvaluator(BaseEvaluator):
             return 0
 
         elif fun_name == "value":
-            # value(path): 取值，不存在则为 null
+            # value(path): get value, returns null if not exists
             if hasattr(PathResolver, "get"):
                 return PathResolver.get(self._state, path)
             return None
@@ -351,7 +356,7 @@ class AutoGenConditionEvaluator(BaseEvaluator):
         raise ConditionError(f"Unknown function: {fun_name}")
 
     def validate_expression(self, expression: str) -> bool:
-        """验证表达式语法"""
+        """Validate expression syntax"""
         try:
             tokens = self._tokenize(expression)
             self._tokens = tokens
@@ -364,18 +369,18 @@ class AutoGenConditionEvaluator(BaseEvaluator):
 
 class SimplePathResolver:
     """
-    简单路径解析器
+    Simple path resolver
 
-    在PathResolver不可用时的回退实现
+    Fallback implementation when PathResolver is unavailable
     """
 
     @staticmethod
     def get(state: Dict[str, Any], path: str) -> Any:
-        """获取路径值"""
+        """Get path value"""
         if not path.startswith("$"):
             return None
 
-        # 简化实现：去掉$然后按.分割
+        # Simplified implementation: remove $ and split by .
         path_parts = path[1:].split(".")
         current = state
 
@@ -389,7 +394,7 @@ class SimplePathResolver:
 
     @staticmethod
     def intersect(path_a: str, path_b: str) -> bool:
-        """检查路径是否相交"""
+        """Check if paths intersect"""
         parts_a = path_a[1:].split(".") if path_a.startswith("$") else path_a.split(".")
         parts_b = path_b[1:].split(".") if path_b.startswith("$") else path_b.split(".")
 
@@ -400,7 +405,7 @@ class SimplePathResolver:
         return min_len > 0
 
 
-# 在PathResolver不可用时使用简单实现
+# Use simple implementation when PathResolver is unavailable
 try:
     from ..core.path import PathResolver
 except ImportError:
@@ -409,14 +414,14 @@ except ImportError:
 
 def evaluate_condition(condition: str, state: Dict[str, Any]) -> bool:
     """
-    便捷的求值函数
+    Convenient evaluation function
 
     Args:
-        condition: 条件表达式
-        state: 主状态
+        condition: Condition expression
+        state: Main state
 
     Returns:
-        布尔结果
+        Boolean result
     """
     evaluator = AutoGenConditionEvaluator(state)
     result = evaluator.evaluate(condition)

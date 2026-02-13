@@ -1,10 +1,10 @@
-"""LinJ 核心组件模块
+"""LinJ Core Components Module
 
-提供跨多个后端实现的核心组件，包括：
-- 路径解析和状态管理
-- 节点和边的定义
-- 变更集和合同验证
-- 文档模型
+Provides core components across multiple backend implementations, including:
+- Path resolution and state management
+- Node and edge definitions
+- Change sets and contract validation
+- Document models
 """
 
 from .path import PathResolver, PathSegment

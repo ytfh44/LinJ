@@ -1,11 +1,11 @@
 """
-ContiText 续体机制测试
+ContiText Continuation Mechanism Tests
 
-验证 17-22 节定义的续体行为：
-- 续体生命周期管理
-- 信号等待机制
-- 变更集提交
-- 冲突处理
+Verifies continuation behavior defined in Sections 17-22:
+- Continuation lifecycle management
+- Signal waiting mechanism
+- Changeset commit
+- Conflict handling
 """
 
 import pytest
@@ -19,13 +19,13 @@ from linj_autogen.core.errors import HandleExpired, ConflictError
 
 
 class TestContinuationLifecycle:
-    """测试续体生命周期 (17-18 节)"""
+    """Test continuation lifecycle (Sections 17-18)"""
 
     def test_continuation_creation(self):
-        """测试续体创建"""
+        """Test continuation creation"""
         engine = ContiTextEngine()
 
-        # 创建根续体
+        # Create root continuation
         root = engine.derive()
         assert root.status == Status.RUNNING
         assert root.handle is not None
@@ -33,38 +33,38 @@ class TestContinuationLifecycle:
         assert root.step_id == 0
         assert root.base_revision == 0
 
-        # 创建子续体
+        # Create child continuation
         child = engine.derive(root)
         assert child.parent_handle == root.handle
         assert child.step_id == root.step_id
         assert child.base_revision == root.base_revision
 
     def test_continuation_states(self):
-        """测试续体状态转换"""
+        """Test continuation state transitions"""
         engine = ContiTextEngine()
         cont = engine.derive()
 
-        # 初始状态
+        # Initial state
         assert cont.status == Status.RUNNING
         assert cont.is_active()
         assert not cont.is_terminal()
         assert cont.can_submit_changes()
 
-        # 挂起
+        # Suspend
         engine.suspend(cont)
         assert cont.status == Status.SUSPENDED
         assert cont.is_active()
         assert not cont.is_terminal()
         assert cont.can_submit_changes()
 
-        # 恢复
+        # Resume
         engine.resume(cont.handle)
         assert cont.status == Status.RUNNING
         assert cont.is_active()
         assert not cont.is_terminal()
         assert cont.can_submit_changes()
 
-        # 完成
+        # Complete
         engine.complete(cont.handle, "result")
         assert cont.status == Status.COMPLETED
         assert not cont.is_active()
@@ -72,7 +72,7 @@ class TestContinuationLifecycle:
         assert cont.can_submit_changes()
         assert cont.result == "result"
 
-        # 取消
+        # Cancel
         cont2 = engine.derive()
         engine.cancel(cont2.handle)
         assert cont2.status == Status.CANCELLED
@@ -81,49 +81,49 @@ class TestContinuationLifecycle:
         assert not cont2.can_submit_changes()
 
     def test_continuation_view(self):
-        """测试续体视图 (18.2 节)"""
+        """Test continuation view (Section 18.2)"""
         state_manager = StateManager({"$.test": "value"})
         engine = ContiTextEngine(state_manager)
         cont = engine.derive()
 
-        # 创建视图
+        # Create view
         view = engine.create_view(cont)
         assert view is not None
 
-        # 测试读取
+        # Test read
         assert view.read("$.test") == "value"
         assert view.exists("$.test")
         assert view.len("$.nonexistent") == 0
 
-        # 测试逻辑快照
+        # Test logical snapshot
         snapshot = cont.get_logical_snapshot()
         assert snapshot["test"] == "value"
 
 
 class TestSignalMechanism:
-    """测试信号机制 (21 节)"""
+    """Test signal mechanism (Section 21)"""
 
     def test_signal_creation(self):
-        """测试信号创建"""
+        """Test signal creation"""
         signal = Signal(name="test", payload={"data": "value"}, correlation="id123")
         assert signal.name == "test"
         assert signal.payload == {"data": "value"}
         assert signal.correlation == "id123"
 
     def test_wait_condition_matching(self):
-        """测试等待条件匹配"""
+        """Test wait condition matching"""
         condition = WaitCondition(name="test_signal")
         signal = Signal(name="test_signal", payload="data")
 
-        # 精确匹配
+        # Exact match
         assert condition.matches(signal)
 
-        # 名称不匹配
+        # Name mismatch
         wrong_signal = Signal(name="other_signal")
         assert not condition.matches(wrong_signal)
 
     def test_correlation_matching(self):
-        """测试关联标识匹配"""
+        """Test correlation identifier matching"""
         condition = WaitCondition(correlation="id123")
         signal1 = Signal(name="any", correlation="id123")
         signal2 = Signal(name="any", correlation="id456")
@@ -132,30 +132,30 @@ class TestSignalMechanism:
         assert not condition.matches(signal2)
 
     def test_predicate_matching(self):
-        """测试谓词匹配"""
+        """Test predicate matching"""
         condition = WaitCondition(predicate='value("$.signal.payload") == "expected"')
         signal = Signal(name="test", payload="expected")
         state = {"signal": {"payload": "expected"}}
 
         assert condition.matches(signal, state)
 
-        # 谓词不匹配
+        # Predicate mismatch
         signal2 = Signal(name="test", payload="different")
         assert not condition.matches(signal2, state)
 
 
 class TestChangeSetCommit:
-    """测试变更集提交 (20 节)"""
+    """Test changeset commit (Section 20)"""
 
     def test_atomic_commit(self):
-        """测试原子性提交"""
+        """Test atomic commit"""
         state_manager = StateManager({"$.counter": 0})
         engine = ContiTextEngine(state_manager)
 
-        # 创建变更集
+        # Create changeset
         changeset = ChangeSet.create_write("$.counter", 1)
 
-        # 提交变更集
+        # Commit changeset
         result = engine.submit_changeset(step_id=1, changeset=changeset, handle="test")
 
         assert result.success
@@ -164,33 +164,33 @@ class TestChangeSetCommit:
         assert state_manager.get("$.counter") == 1
 
     def test_conflict_detection(self):
-        """测试冲突检测"""
+        """Test conflict detection"""
         state_manager = StateManager({"$.value": "original"})
         engine = ContiTextEngine(state_manager)
 
-        # 第一个变更集
+        # First changeset
         changeset1 = ChangeSet.create_write("$.value", "first")
         result1 = engine.submit_changeset(
             step_id=1, changeset=changeset1, handle="test1"
         )
         assert result1.success
 
-        # 第二个变更集（相同路径，不同 step_id）
+        # Second changeset (same path, different step_id)
         changeset2 = ChangeSet.create_write("$.value", "second")
         result2 = engine.submit_changeset(
             step_id=2, changeset=changeset2, handle="test2"
         )
         assert result2.success
 
-        # 验证最终状态（按 step_id 顺序应用）
+        # Verify final state (applied in step_id order)
         assert state_manager.get("$.value") == "second"
 
     def test_base_revision_mismatch(self):
-        """测试基准版本不匹配"""
+        """Test base revision mismatch"""
         state_manager = StateManager({"$.value": "original"})
         engine = ContiTextEngine(state_manager)
 
-        # 手动修改版本号模拟冲突
+        # Manually modify revision to simulate conflict
         state_manager._revision = 5
 
         changeset = ChangeSet.create_write("$.value", "new")
@@ -198,7 +198,7 @@ class TestChangeSetCommit:
             step_id=1,
             changeset=changeset,
             handle="test",
-            base_revision=3,  # 不匹配的基准版本
+            base_revision=3,  # Mismatched base revision
         )
 
         assert not result.success
@@ -206,42 +206,42 @@ class TestChangeSetCommit:
 
 
 class TestContinuationEngine:
-    """测试 ContiText 引擎集成"""
+    """Test ContiText engine integration"""
 
     @pytest.mark.asyncio
     async def test_derive_and_cancel_propagation(self):
-        """测试派生和取消传播 (19.5 节)"""
+        """Test derive and cancel propagation (Section 19.5)"""
         engine = ContiTextEngine()
 
-        # 创建父子续体
+        # Create parent and child continuations
         parent = engine.derive()
         child1 = engine.derive(parent)
         child2 = engine.derive(parent)
 
-        # 取消父续体
+        # Cancel parent continuation
         engine.cancel(parent.handle)
 
-        # 验证传播
+        # Verify propagation
         assert parent.status == Status.CANCELLED
         assert child1.status == Status.CANCELLED
         assert child2.status == Status.CANCELLED
 
     @pytest.mark.asyncio
     async def test_join_completion(self):
-        """测试合流完成 (19.4 节)"""
+        """Test join completion (Section 19.4)"""
         engine = ContiTextEngine()
 
-        # 创建多个续体
+        # Create multiple continuations
         cont1 = engine.derive()
         cont2 = engine.derive()
         cont3 = engine.derive()
 
-        # 完成续体
+        # Complete continuations
         engine.complete(cont1.handle, "result1")
         engine.complete(cont2.handle, "result2")
         engine.fail(cont3.handle, "error")
 
-        # 合流等待
+        # Join wait
         results = await engine.join([cont1.handle, cont2.handle, cont3.handle])
 
         assert len(results) == 3
@@ -253,62 +253,62 @@ class TestContinuationEngine:
         assert results[2].error == "error"
 
     def test_signal_waiting(self):
-        """测试信号等待"""
+        """Test signal waiting"""
         engine = ContiTextEngine()
         cont = engine.derive()
 
-        # 注册等待条件
+        # Register wait condition
         condition = WaitCondition(name="expected_signal")
         engine.suspend(cont, wait_condition=condition)
 
-        # 发送不匹配的信号
+        # Send non-matching signal
         wrong_signal = Signal(name="wrong_signal")
         engine.send_signal(wrong_signal)
 
-        # 检查等待（应该没有匹配）
+        # Check wait (should not match)
         state = {}
         matched = engine.check_signal(cont.handle, state)
         assert matched is None
 
-        # 发送匹配的信号
+        # Send matching signal
         right_signal = Signal(name="expected_signal")
         engine.send_signal(right_signal)
 
-        # 检查等待（应该匹配）
+        # Check wait (should match)
         matched = engine.check_signal(cont.handle, state)
         assert matched is not None
         assert matched.name == "expected_signal"
 
 
 class TestErrorHandling:
-    """测试错误处理"""
+    """Test error handling"""
 
     def test_handle_expired(self):
-        """测试句柄过期"""
+        """Test handle expiration"""
         engine = ContiTextEngine()
 
-        # 尝试恢复不存在的续体
+        # Try to resume non-existent continuation
         with pytest.raises(HandleExpired):
             engine.resume("nonexistent_handle")
 
-        # 尝试取消不存在的续体（应该静默返回）
-        engine.cancel("nonexistent_handle")  # 不应该抛出异常
+        # Try to cancel non-existent continuation (should return silently)
+        engine.cancel("nonexistent_handle")  # Should not raise exception
 
     def test_invalid_state_transitions(self):
-        """测试无效状态转换"""
+        """Test invalid state transitions"""
         engine = ContiTextEngine()
         cont = engine.derive()
 
-        # 尝试恢复非挂起状态的续体
+        # Try to resume non-suspended continuation
         with pytest.raises(ValueError):
             engine.resume(cont.handle)
 
-        # 尝试完成已取消的续体
+        # Try to complete already cancelled continuation
         engine.cancel(cont.handle)
         with pytest.raises(ConflictError):
             engine.complete(cont.handle, "result")
 
-        # 尝试失败已取消的续体
+        # Try to fail already cancelled continuation
         cont2 = engine.derive()
         engine.cancel(cont2.handle)
         with pytest.raises(ConflictError):
@@ -316,26 +316,26 @@ class TestErrorHandling:
 
 
 class TestPerformanceAndLimits:
-    """测试性能和限制"""
+    """Test performance and limits"""
 
     def test_large_number_of_continuations(self):
-        """测试大量续体"""
+        """Test large number of continuations"""
         engine = ContiTextEngine()
 
-        # 创建大量续体
+        # Create large number of continuations
         continuations = []
         for i in range(1000):
             cont = engine.derive()
             continuations.append(cont)
 
-        # 验证所有续体都被正确创建
+        # Verify all continuations were created correctly
         assert len(continuations) == 1000
         for cont in continuations:
             assert cont.status == Status.RUNNING
             assert cont.handle is not None
 
     def test_concurrent_operations(self):
-        """测试并发操作"""
+        """Test concurrent operations"""
         import threading
         import time
 
@@ -347,17 +347,17 @@ class TestPerformanceAndLimits:
                 cont = engine.derive()
                 results.append(cont.handle)
 
-        # 并发创建续体
+        # Concurrent continuation creation
         threads = []
         for i in range(10):
             thread = threading.Thread(target=create_continuations, args=(i * 100, 100))
             threads.append(thread)
             thread.start()
 
-        # 等待所有线程完成
+        # Wait for all threads to complete
         for thread in threads:
             thread.join()
 
-        # 验证结果
+        # Verify results
         assert len(results) == 1000
-        assert len(set(results)) == 1000  # 所有句柄都唯一
+        assert len(set(results)) == 1000  # All handles are unique

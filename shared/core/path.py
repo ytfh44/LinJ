@@ -1,11 +1,11 @@
 """
-状态路径解析器
+State Path Resolver
 
-实现 LinJ 规范 5.1-5.4 节定义的路径语法和读写语义：
-- 根为 $
-- . 访问对象字段
-- [n] 访问数组下标
-- 写入时自动创建中间对象/数组
+Implements path syntax and read/write semantics defined in LinJ specification sections 5.1-5.4:
+- Root is $
+- . accesses object fields
+- [n] accesses array indices
+- Automatically creates intermediate objects/arrays on write
 """
 
 import re
@@ -15,7 +15,7 @@ from ..exceptions.errors import MappingError
 
 
 class PathSegment:
-    """路径段"""
+    """Path segment"""
 
     def __init__(self, key: Union[str, int]):
         self.key = key
@@ -24,7 +24,7 @@ class PathSegment:
         return isinstance(self.key, int)
 
     def get_key(self) -> Union[str, int]:
-        """获取键值，类型安全"""
+        """Get key value, type-safe"""
         return self.key
 
     def __repr__(self):
@@ -35,19 +35,19 @@ class PathSegment:
 
 class PathResolver:
     """
-    路径解析器
+    Path Resolver
 
-    支持语法：
-    - $.a.b      -> 对象字段访问
-    - $.arr[0]   -> 数组下标访问
-    - $.a[0].b   -> 混合访问
+    Supported syntax:
+    - $.a.b      -> Object field access
+    - $.arr[0]   -> Array index access
+    - $.a[0].b   -> Mixed access
     """
 
     PATH_PATTERN = re.compile(
-        r"^\$"  # 根 $
+        r"^\$"  # Root $
         r"(?:\.(?P<field>[a-zA-Z_]\w*)"  # .field
         r"|\[(?P<index>\d+)\])"  # [index]
-        r"*$"  # 零个或多个
+        r"*$"  # Zero or more
     )
 
     SEGMENT_PATTERN = re.compile(
@@ -58,22 +58,22 @@ class PathResolver:
     @classmethod
     def parse(cls, path: str) -> List[PathSegment]:
         """
-        解析路径字符串为路径段列表
+        Parse path string into path segment list
 
         Args:
-            path: 路径字符串，如 "$.a.b[0]"
+            path: Path string, e.g. "$.a.b[0]"
 
         Returns:
-            PathSegment 列表
+            List of PathSegments
 
         Raises:
-            MappingError: 路径格式无效
+            MappingError: Invalid path format
         """
         if not path.startswith("$"):
             raise MappingError(f"Path must start with $: {path}")
 
         segments = []
-        rest = path[1:]  # 跳过 $
+        rest = path[1:]  # Skip $
 
         while rest:
             match = cls.SEGMENT_PATTERN.match(rest)
@@ -92,16 +92,16 @@ class PathResolver:
     @classmethod
     def get(cls, obj: Any, path: str) -> Any:
         """
-        读取路径值
+        Read path value
 
-        按 5.2 节：读取不存在路径时返回 None（空值）
+        Per section 5.2: Returns None (null) when reading non-existent path
 
         Args:
-            obj: 根对象（通常是 dict）
-            path: 路径字符串
+            obj: Root object (typically dict)
+            path: Path string
 
         Returns:
-            路径对应的值，不存在则返回 None
+            Value at path, or None if not found
         """
         try:
             segments = cls.parse(path)
@@ -139,28 +139,28 @@ class PathResolver:
         cls, obj: dict, path: str, value: Any, max_array_length: int = 10000
     ) -> None:
         """
-        设置路径值
+        Set path value
 
-        按 5.3 节：
-        - 中间对象缺失时自动创建 {}
-        - 中间数组缺失时自动创建 []
-        - 数组下标越界时以 null 填充至该位置
-        - 中间位置不是对象/数组时产生 MappingError
+        Per section 5.3:
+        - Automatically create {} when intermediate object is missing
+        - Automatically create [] when intermediate array is missing
+        - Fill with null when array index is out of bounds
+        - Produce MappingError when intermediate position is not object/array
 
         Args:
-            obj: 根对象（必须是 dict）
-            path: 路径字符串
-            value: 要设置的值
-            max_array_length: 最大数组长度限制
+            obj: Root object (must be dict)
+            path: Path string
+            value: Value to set
+            max_array_length: Maximum array length limit
 
         Raises:
-            MappingError: 路径无效或类型冲突
+            MappingError: Invalid path or type conflict
         """
         segments = cls.parse(path)
         if not segments:
             raise MappingError("Cannot set root path $")
 
-        # 遍历到倒数第二个段，创建中间对象/数组
+        # Iterate to second-to-last segment, create intermediate objects/arrays
         current = obj
         for i, seg in enumerate(segments[:-1]):
             next_seg = segments[i + 1]
@@ -172,17 +172,17 @@ class PathResolver:
                 if not isinstance(current, list):
                     raise MappingError(f"Expected list at path segment {seg}")
 
-                # 扩容数组
+                # Expand array
                 if idx >= len(current):
                     if idx >= max_array_length:
                         raise MappingError(
                             f"Array index {idx} exceeds max length {max_array_length}",
                             {"threshold": max_array_length, "index": idx},
                         )
-                    # 以 None 填充
+                    # Fill with None
                     current.extend([None] * (idx - len(current) + 1))
 
-                # 创建下一级容器
+                # Create next-level container
                 if current[idx] is None:
                     if next_seg.is_array_index():
                         current[idx] = []
@@ -197,7 +197,7 @@ class PathResolver:
                 if not isinstance(current, dict):
                     raise MappingError(f"Expected object at path segment {seg}")
 
-                # 创建下一级容器
+                # Create next-level container
                 if key not in current or current[key] is None:
                     if next_seg.is_array_index():
                         current[key] = []
@@ -206,7 +206,7 @@ class PathResolver:
 
                 current = current[key]
 
-        # 设置最终值
+        # Set final value
         last_seg = segments[-1]
         if last_seg.is_array_index():
             idx = last_seg.get_key()  # type: ignore
@@ -239,26 +239,26 @@ class PathResolver:
     @classmethod
     def delete(cls, obj: dict, path: str) -> None:
         """
-        删除路径值
+        Delete path value
 
-        按 5.4 节：
-        - 删除后该路径读取结果为 null
-        - 删除不存在的字段为无效操作，不报错
-        - 删除数组元素时设为 null（不缩短数组）
+        Per section 5.4:
+        - Reading deleted path returns null
+        - Deleting non-existent field is a no-op (no error)
+        - Setting deleted array element to null (array not shortened)
 
         Args:
-            obj: 根对象
-            path: 路径字符串
+            obj: Root object
+            path: Path string
         """
         try:
             segments = cls.parse(path)
         except MappingError:
-            return  # 无效路径，静默忽略
+            return  # Invalid path, silently ignore
 
         if not segments:
-            return  # 不能删除根
+            return  # Cannot delete root
 
-        # 获取父级容器
+        # Get parent container
         parent = obj
         for seg in segments[:-1]:
             if parent is None:
@@ -286,7 +286,7 @@ class PathResolver:
         if parent is None:
             return
 
-        # 删除最终值
+        # Delete final value
         last_seg = segments[-1]
         if last_seg.is_array_index():
             idx = last_seg.get_key()  # type: ignore
@@ -295,30 +295,30 @@ class PathResolver:
                 and isinstance(parent, list)
                 and 0 <= idx < len(parent)
             ):
-                parent[idx] = None  # 设为 null，不缩短数组
+                parent[idx] = None  # Set to null, don't shorten array
         else:
             key = last_seg.get_key()  # type: ignore
             if isinstance(key, str) and isinstance(parent, dict) and key in parent:
-                parent[key] = None  # 设为 null，不删除键
+                parent[key] = None  # Set to null, don't delete key
 
     @classmethod
     def intersect(cls, path_a: str, path_b: str) -> bool:
         """
-        判断两路径是否相交
+        Check if two paths intersect
 
-        按 11.4 节定义：
-        - 一条路径是另一条的前缀（$.a 与 $.a.b）
-        - 两条路径完全相同
-        - $.a[0] 与 $.a[1] 不相交
-        - $.a 与 $.a[1] 相交
-        - $.a[0] 与 $.a[0].b 相交
+        Per section 11.4 definition:
+        - One path is a prefix of another ($.a vs $.a.b)
+        - Two paths are identical
+        - $.a[0] vs $.a[1] do not intersect
+        - $.a vs $.a[1] intersect
+        - $.a[0] vs $.a[0].b intersect
 
         Args:
-            path_a: 第一条路径
-            path_b: 第二条路径
+            path_a: First path
+            path_b: Second path
 
         Returns:
-            是否相交
+            Whether paths intersect
         """
         try:
             segs_a = cls.parse(path_a)
@@ -326,7 +326,7 @@ class PathResolver:
         except MappingError:
             return False
 
-        # 取较短的长度
+        # Take the shorter length
         min_len = min(len(segs_a), len(segs_b))
 
         for i in range(min_len):
@@ -334,22 +334,22 @@ class PathResolver:
             seg_b = segs_b[i]
 
             if seg_a.key != seg_b.key:
-                # 在同一位置但键不同 -> 不相交
+                # Different keys at same position -> no intersection
                 return False
 
-        # 所有对应段都相同，或一条是另一条的前缀 -> 相交
+        # All corresponding segments are same, or one is prefix of other -> intersect
         return True
 
     @classmethod
     def get_parent_and_key(cls, path: str) -> tuple:
         """
-        获取路径的父路径和最终键
+        Get parent path and final key from path
 
         Args:
-            path: 完整路径
+            path: Full path
 
         Returns:
-            (父路径, 最终键) 元组
+            (Parent path, Final key) tuple
         """
         segments = cls.parse(path)
         if not segments:

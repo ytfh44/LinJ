@@ -1,7 +1,7 @@
 """
-LinJ-ContiText 串行/并行一致性测试
+LinJ-ContiText Serial/Parallel Consistency Tests
 
-验证底线目标：同一文档 + 同一初始状态 + 同一外部响应 = 一致的最终主状态
+Verifies the invariant: Same document + Same initial state + Same external response = Consistent final state
 """
 
 import asyncio
@@ -11,11 +11,11 @@ from linj_autogen.core.document import LinJDocument
 
 
 class TestSerialParallelConsistency:
-    """测试串行/并行执行一致性（底线目标）"""
+    """Test serial/parallel execution consistency (invariant)"""
 
     @pytest.mark.asyncio
     async def test_simple_workflow_consistency(self):
-        """测试简单工作流一致性"""
+        """Test simple workflow consistency"""
 
         async def set_value(value: str, path: str) -> str:
             return value
@@ -49,17 +49,17 @@ class TestSerialParallelConsistency:
             edges=[],
         )
 
-        # 串行执行
+        # Serial execution
         serial_mapper = LinJToContiTextMapper(doc)
         serial_mapper.executor.register_tool("set_value", set_value)
         serial_result = await serial_mapper.execute({"input": "test"})
 
-        # 并行执行
+        # Parallel execution
         parallel_mapper = ParallelLinJExecutor(doc)
         parallel_mapper.executor.register_tool("set_value", set_value)
         parallel_result = await parallel_mapper.execute_parallel({"input": "test"})
 
-        # 验证一致性
+        # Verify consistency
         assert serial_result["result1"] == "A"
         assert serial_result["result2"] == "B"
         assert parallel_result["result1"] == "A"
@@ -68,7 +68,7 @@ class TestSerialParallelConsistency:
 
     @pytest.mark.asyncio
     async def test_dependent_workflow_consistency(self):
-        """测试依赖工作流一致性"""
+        """Test dependent workflow consistency"""
         execution_order = []
 
         async def step(name: str) -> str:
@@ -96,7 +96,7 @@ class TestSerialParallelConsistency:
             edges=[{"from": "step1", "to": "step2", "kind": "control"}],
         )
 
-        # 串行执行
+        # Serial execution
         serial_execution_order = []
 
         async def capture_step_serial(name: str) -> str:
@@ -107,7 +107,7 @@ class TestSerialParallelConsistency:
         serial_mapper.executor.register_tool("step", capture_step_serial)
         serial_result = await serial_mapper.execute()
 
-        # 并行执行
+        # Parallel execution
         parallel_execution_order = []
 
         async def capture_step_parallel(name: str) -> str:
@@ -118,14 +118,14 @@ class TestSerialParallelConsistency:
         parallel_mapper.mapper.executor.register_tool("step", capture_step_parallel)
         parallel_result = await parallel_mapper.execute_parallel()
 
-        # 验证执行顺序一致（step1 -> step2）
+        # Verify execution order is consistent (step1 -> step2)
         assert serial_execution_order == ["first", "second"]
         assert parallel_execution_order == ["first", "second"]
         assert serial_result == parallel_result
 
     @pytest.mark.asyncio
     async def test_conflict_resolution_consistency(self):
-        """测试冲突解决一致性"""
+        """Test conflict resolution consistency"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -134,35 +134,35 @@ class TestSerialParallelConsistency:
                     "type": "hint",
                     "template": "value1",
                     "write_to": "$.shared",
-                    "rank": 2,  # 高 rank，应先执行
+                    "rank": 2,  # High rank, should execute first
                 },
                 {
                     "id": "writer2",
                     "type": "hint",
                     "template": "value2",
                     "write_to": "$.shared",
-                    "rank": 1,  # 低 rank，应后执行
+                    "rank": 1,  # Low rank, should execute later
                 },
             ],
             edges=[{"from": "writer1", "to": "writer2", "kind": "control"}],
         )
 
-        # 串行执行
+        # Serial execution
         serial_mapper = LinJToContiTextMapper(doc)
         serial_result = await serial_mapper.execute()
 
-        # 并行执行（实际上由于依赖，仍然是串行）
+        # Parallel execution (actually serial due to dependency)
         parallel_mapper = ParallelLinJExecutor(doc)
         parallel_result = await parallel_mapper.execute_parallel()
 
-        # 验证最终状态一致（writer2 覆盖 writer1）
+        # Verify final state consistency (writer2 overwrites writer1)
         assert serial_result["shared"] == "value2"
         assert parallel_result["shared"] == "value2"
         assert serial_result == parallel_result
 
     @pytest.mark.asyncio
     async def test_disjoint_writes_preservation(self):
-        """测试不相交写入保留"""
+        """Test disjoint writes preservation"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -191,15 +191,15 @@ class TestSerialParallelConsistency:
             edges=[],
         )
 
-        # 串行执行
+        # Serial execution
         serial_mapper = LinJToContiTextMapper(doc)
         serial_result = await serial_mapper.execute()
 
-        # 并行执行（可以真正并行）
+        # Parallel execution (can truly be parallel)
         parallel_mapper = ParallelLinJExecutor(doc)
         parallel_result = await parallel_mapper.execute_parallel()
 
-        # 验证所有写入都保留
+        # Verify all writes are preserved
         assert serial_result["data"]["a"] == "A_value"
         assert serial_result["data"]["b"] == "B_value"
         assert serial_result["other"] == "C_value"
@@ -212,11 +212,11 @@ class TestSerialParallelConsistency:
 
 
 class TestStepIdOrdering:
-    """测试 step_id 决定性排序（24.3 节）"""
+    """Test step_id deterministic ordering (Section 24.3)"""
 
     @pytest.mark.asyncio
     async def test_step_id_allocation_order(self):
-        """测试 step_id 分配顺序"""
+        """Test step_id allocation order"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -242,7 +242,7 @@ class TestStepIdOrdering:
         mapper = LinJToContiTextMapper(doc)
         step_ids = []
 
-        # 收集 step_id
+        # Collect step_id
         original_allocate = mapper.scheduler.allocate_step_id
 
         def capture_step_id():
@@ -254,12 +254,12 @@ class TestStepIdOrdering:
 
         await mapper.execute()
 
-        # 验证 step_id 顺序：high_rank -> no_rank -> low_rank
-        assert step_ids == [1, 2, 3]  # 单调递增
+        # Verify step_id order: high_rank -> no_rank -> low_rank
+        assert step_ids == [1, 2, 3]  # Monotonically increasing
 
     @pytest.mark.asyncio
     async def test_rank_priority_over_position(self):
-        """测试 rank 优先级高于数组位置"""
+        """Test rank priority over array position"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -294,17 +294,17 @@ class TestStepIdOrdering:
         parallel_mapper = ParallelLinJExecutor(doc)
         parallel_result = await parallel_mapper.execute_parallel()
 
-        # 验证执行顺序由 rank 决定：first_pos -> second_pos -> third_pos
-        # 最终值取决于覆盖关系，这里假设无依赖，按 rank 顺序执行
+        # Verify execution order is determined by rank: first_pos -> second_pos -> third_pos
+        # Final value depends on overwrite relationship, here assuming no dependency, executed in rank order
         assert serial_result == parallel_result
 
 
 class TestChangeSetCommitOrdering:
-    """测试变更集提交顺序（20.2 节、24.3 节）"""
+    """Test changeset commit ordering (Sections 20.2, 24.3)"""
 
     @pytest.mark.asyncio
     async def test_sequential_commit_order(self):
-        """测试串行提交顺序"""
+        """Test sequential commit order"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -321,16 +321,16 @@ class TestChangeSetCommitOrdering:
         mapper = LinJToContiTextMapper(doc)
         result = await mapper.execute()
 
-        # 验证最终状态：step3 最后执行，覆盖前面的值
+        # Verify final state: step3 executes last, overwrites previous values
         assert result["value"] == "C"
 
-        # 验证提交管理器状态
+        # Verify commit manager state
         commit_manager = mapper.contitext_engine.get_commit_manager()
         assert commit_manager.get_accepted_count() == 3
 
     @pytest.mark.asyncio
     async def test_non_intersection_optimization(self):
-        """测试非相交优化"""
+        """Test non-intersection optimization"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -359,22 +359,22 @@ class TestChangeSetCommitOrdering:
             edges=[],
         )
 
-        # 并行执行可以优化不相交写入
+        # Parallel execution can optimize disjoint writes
         parallel_mapper = ParallelLinJExecutor(doc)
         result = await parallel_mapper.execute_parallel()
 
-        # 验证所有不相交写入都保留
+        # Verify all disjoint writes are preserved
         assert result["path1"] == "A"
         assert result["path2"] == "B"
         assert result["path3"] == "C"
 
 
 class TestResourceConstraints:
-    """测试资源域约束（25 节）"""
+    """Test resource domain constraints (Section 25)"""
 
     @pytest.mark.asyncio
     async def test_placement_constraints(self):
-        """测试 placement 约束"""
+        """Test placement constraints"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -388,7 +388,7 @@ class TestResourceConstraints:
             ],
         )
 
-        # 同域节点应该能一起执行
+        # Same-domain nodes should execute together
         mapper = ParallelLinJExecutor(doc)
         result = await mapper.execute_parallel()
 
@@ -397,7 +397,7 @@ class TestResourceConstraints:
 
     @pytest.mark.asyncio
     async def test_resource_dependencies(self):
-        """测试 kind=resource 依赖"""
+        """Test kind=resource dependencies"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -414,7 +414,7 @@ class TestResourceConstraints:
             ],
         )
 
-        # 使用同一 resource 的节点应该被安排在同一域
+        # Nodes using same resource should be scheduled in same domain
         mapper = ParallelLinJExecutor(doc)
         result = await mapper.execute_parallel()
 
@@ -423,11 +423,11 @@ class TestResourceConstraints:
 
 
 class TestBoundaryConditions:
-    """测试边界条件"""
+    """Test boundary conditions"""
 
     @pytest.mark.asyncio
     async def test_empty_document(self):
-        """测试空文档"""
+        """Test empty document"""
         doc = LinJDocument(linj_version="0.1", nodes=[], edges=[])
 
         serial_mapper = LinJToContiTextMapper(doc)
@@ -436,15 +436,15 @@ class TestBoundaryConditions:
         parallel_mapper = ParallelLinJExecutor(doc)
         parallel_result = await parallel_mapper.execute_parallel()
 
-        # 空文档应该返回空状态
+        # Empty document should return empty state
         assert serial_result == {}
         assert parallel_result == {}
         assert serial_result == parallel_result
 
     @pytest.mark.asyncio
     async def test_max_rounds_limit(self):
-        """测试最大轮次限制"""
-        # 创建可能导致无限循环的文档
+        """Test max rounds limit"""
+        # Create document that might cause infinite loop
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -459,15 +459,15 @@ class TestBoundaryConditions:
             policies={"max_rounds": 3},
         )
 
-        # 应该抛出轮次超限错误
+        # Should raise rounds exceeded error
         mapper = LinJToContiTextMapper(doc)
 
-        with pytest.raises(Exception):  # 应该抛出 ExecutionError
+        with pytest.raises(Exception):  # Should raise ExecutionError
             await mapper.execute()
 
     @pytest.mark.asyncio
     async def test_max_steps_limit(self):
-        """测试最大步骤限制"""
+        """Test max steps limit"""
         doc = LinJDocument(
             linj_version="0.1",
             nodes=[
@@ -478,8 +478,8 @@ class TestBoundaryConditions:
             policies={"max_steps": 1},
         )
 
-        # 应该抛出步骤超限错误
+        # Should raise steps exceeded error
         mapper = LinJToContiTextMapper(doc)
 
-        with pytest.raises(Exception):  # 应该抛出 ExecutionError
+        with pytest.raises(Exception):  # Should raise ExecutionError
             await mapper.execute()

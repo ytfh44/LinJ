@@ -1,12 +1,12 @@
 """
-条件表达式求值器
+Condition Expression Evaluator
 
-实现 LinJ 规范第 14 节定义的条件表达式语法和语义：
-- 比较运算符: ==, !=, >, >=, <, <=
-- 逻辑运算符: AND, OR, NOT (必须短路)
-- 函数: exists(path), len(path), value(path)
+Implements condition expression syntax and semantics as defined in LinJ Specification Section 14:
+- Comparison operators: ==, !=, >, >=, <, <=
+- Logical operators: AND, OR, NOT (must short-circuit)
+- Functions: exists(path), len(path), value(path)
 
-安全实现：不使用 eval()，使用递归下降解析器
+Secure implementation: no eval(), using recursive descent parser
 """
 
 import re
@@ -18,18 +18,18 @@ from .path import PathResolver
 
 
 class TokenType(Enum):
-    """词法标记类型"""
+    """Lexical token types"""
 
-    # 字面量
+    # Literals
     NUMBER = "NUMBER"
     STRING = "STRING"
     NULL = "NULL"
     BOOLEAN = "BOOLEAN"
 
-    # 标识符
+    # Identifiers
     IDENTIFIER = "IDENTIFIER"
 
-    # 比较运算符
+    # Comparison operators
     EQ = "=="
     NE = "!="
     GT = ">"
@@ -37,25 +37,25 @@ class TokenType(Enum):
     LT = "<"
     LTE = "<="
 
-    # 逻辑运算符
+    # Logical operators
     AND = "AND"
     OR = "OR"
     NOT = "NOT"
 
-    # 括号
+    # Parentheses
     LPAREN = "("
     RPAREN = ")"
 
-    # 函数调用
+    # Function calls
     COMMA = ","
 
-    # 结束
+    # End
     EOF = "EOF"
 
 
 @dataclass
 class Token:
-    """词法标记"""
+    """Lexical token"""
 
     type: TokenType
     value: Any
@@ -63,7 +63,7 @@ class Token:
 
 
 class Lexer:
-    """词法分析器"""
+    """Lexer"""
 
     def __init__(self, text: str):
         self.text = text
@@ -71,17 +71,17 @@ class Lexer:
         self.current_char = self.text[0] if self.text else None
 
     def advance(self) -> None:
-        """前进到下一个字符"""
+        """Advance to next character"""
         self.pos += 1
         self.current_char = self.text[self.pos] if self.pos < len(self.text) else None
 
     def skip_whitespace(self) -> None:
-        """跳过空白字符"""
+        """Skip whitespace characters"""
         while self.current_char and self.current_char.isspace():
             self.advance()
 
     def read_number(self) -> Token:
-        """读取数字"""
+        """Read number"""
         start = self.pos
         while self.current_char and (
             self.current_char.isdigit() or self.current_char == "."
@@ -94,20 +94,20 @@ class Lexer:
         return Token(TokenType.NUMBER, int(value), start)
 
     def read_string(self) -> Token:
-        """读取字符串"""
+        """Read string"""
         start = self.pos
-        self.advance()  # 跳过开始的引号
+        self.advance()  # Skip opening quote
 
         while self.current_char and self.current_char != '"':
             if self.current_char == "\\" and self.text[self.pos + 1]:
-                self.advance()  # 跳过转义字符
+                self.advance()  # Skip escape character
             self.advance()
 
-        self.advance()  # 跳过结束的引号
+        self.advance()  # Skip closing quote
         return Token(TokenType.STRING, self.text[start + 1 : self.pos - 1], start)
 
     def read_identifier(self) -> Token:
-        """读取标识符或关键字"""
+        """Read identifier or keyword"""
         start = self.pos
         while self.current_char and (
             self.current_char.isalnum() or self.current_char == "_"
@@ -116,7 +116,7 @@ class Lexer:
 
         value = self.text[start : self.pos]
 
-        # 检查是否是关键字
+        # Check if keyword
         keyword_map = {
             "AND": TokenType.AND,
             "OR": TokenType.OR,
@@ -138,12 +138,12 @@ class Lexer:
         return Token(TokenType.IDENTIFIER, value, start)
 
     def peek(self) -> Optional[str]:
-        """查看下一个字符"""
+        """Peek at next character"""
         peek_pos = self.pos + 1
         return self.text[peek_pos] if peek_pos < len(self.text) else None
 
     def next_token(self) -> Token:
-        """获取下一个标记"""
+        """Get next token"""
         self.skip_whitespace()
 
         if self.current_char is None:
@@ -151,7 +151,7 @@ class Lexer:
 
         start = self.pos
 
-        # 检查两个字符的运算符
+        # Check two-character operators
         if self.current_char == "=" and self.peek() == "=":
             self.advance()
             self.advance()
@@ -172,7 +172,7 @@ class Lexer:
             self.advance()
             return Token(TokenType.LTE, "<=", start)
 
-        # 单字符运算符
+        # Single-character operators
         if self.current_char == ">":
             self.advance()
             return Token(TokenType.GT, ">", start)
@@ -181,7 +181,7 @@ class Lexer:
             self.advance()
             return Token(TokenType.LT, "<", start)
 
-        # 括号和逗号
+        # Parentheses and comma
         if self.current_char == "(":
             self.advance()
             return Token(TokenType.LPAREN, "(", start)
@@ -194,11 +194,11 @@ class Lexer:
             self.advance()
             return Token(TokenType.COMMA, ",", start)
 
-        # 路径引用 (以 $ 开头)
+        # Path reference (starts with $)
         if self.current_char == "$":
             self.advance()
             path_value = "$"
-            # 收集路径段
+            # Collect path segments
             while self.current_char and (
                 self.current_char.isalnum()
                 or self.current_char in "._[]"
@@ -208,14 +208,14 @@ class Lexer:
                 self.advance()
             return Token(TokenType.STRING, path_value, start)
 
-        # 数字或字符串
+        # Number or string
         if self.current_char.isdigit():
             return self.read_number()
 
         if self.current_char == '"':
             return self.read_string()
 
-        # 标识符或关键字
+        # Identifier or keyword
         if self.current_char.isalpha() or self.current_char == "_":
             return self.read_identifier()
 
@@ -225,18 +225,18 @@ class Lexer:
 
 
 class Parser:
-    """递归下降解析器"""
+    """Recursive descent parser"""
 
     def __init__(self, text: str):
         self.lexer = Lexer(text)
         self.current_token = self.lexer.next_token()
 
     def advance(self) -> None:
-        """前进到下一个标记"""
+        """Advance to next token"""
         self.current_token = self.lexer.next_token()
 
     def expect(self, token_type: TokenType) -> Token:
-        """期望特定类型的标记"""
+        """Expect specific token type"""
         if self.current_token.type == token_type:
             token = self.current_token
             self.advance()
@@ -244,15 +244,15 @@ class Parser:
         raise SyntaxError(f"Expected {token_type}, got {self.current_token.type}")
 
     def parse(self) -> "ASTNode":
-        """解析表达式"""
+        """Parse expression"""
         node = self.parse_or()
         if self.current_token.type != TokenType.EOF:
             raise SyntaxError(f"Unexpected token: {self.current_token.type}")
         return node
 
-    # 优先级：NOT > 比较 > AND > OR
+    # Precedence: NOT > comparison > AND > OR
     def parse_or(self) -> "ASTNode":
-        """解析 OR 表达式"""
+        """Parse OR expression"""
         node = self.parse_and()
 
         while self.current_token.type == TokenType.OR:
@@ -263,7 +263,7 @@ class Parser:
         return node
 
     def parse_and(self) -> "ASTNode":
-        """解析 AND 表达式"""
+        """Parse AND expression"""
         node = self.parse_not()
 
         while self.current_token.type == TokenType.AND:
@@ -274,7 +274,7 @@ class Parser:
         return node
 
     def parse_not(self) -> "ASTNode":
-        """解析 NOT 表达式"""
+        """Parse NOT expression"""
         if self.current_token.type == TokenType.NOT:
             self.advance()
             operand = self.parse_not()
@@ -283,10 +283,10 @@ class Parser:
         return self.parse_comparison()
 
     def parse_comparison(self) -> "ASTNode":
-        """解析比较表达式"""
+        """Parse comparison expression"""
         left = self.parse_primary()
 
-        # 比较运算符
+        # Comparison operators
         comparison_ops = {
             TokenType.EQ: lambda l, r: EqNode(l, r),
             TokenType.NE: lambda l, r: NeNode(l, r),
@@ -305,7 +305,7 @@ class Parser:
         return left
 
     def parse_primary(self) -> "ASTNode":
-        """解析基本表达式"""
+        """Parse primary expression"""
         token = self.current_token
 
         if token.type == TokenType.LPAREN:
@@ -336,11 +336,11 @@ class Parser:
         raise SyntaxError(f"Unexpected token: {token.type}")
 
     def parse_identifier(self) -> "ASTNode":
-        """解析标识符（可能是函数调用或变量）"""
+        """Parse identifier (may be function call or variable)"""
         name = self.current_token.value
         self.advance()
 
-        # 检查是否是函数调用
+        # Check if function call
         if self.current_token.type == TokenType.LPAREN:
             self.advance()
             args = []
@@ -354,7 +354,7 @@ class Parser:
 
             self.expect(TokenType.RPAREN)
 
-            # 内置函数
+            # Built-in functions
             if name == "exists":
                 if len(args) != 1:
                     raise SyntaxError("exists() requires exactly 1 argument")
@@ -370,26 +370,26 @@ class Parser:
                     raise SyntaxError("value() requires exactly 1 argument")
                 return ValueNode(args[0])
 
-            # 未知函数调用
+            # Unknown function call
             return FunctionNode(name, args)
 
-        # 标识符引用
+        # Identifier reference
         return IdentifierNode(name)
 
 
-# AST 节点类
+# AST node classes
 class ASTNode:
-    """AST 节点基类"""
+    """AST node base class"""
 
     def evaluate(
         self, state: Dict[str, Any], context: Optional[Dict[str, Any]] = None
     ) -> Any:
-        """求值"""
+        """Evaluate"""
         raise NotImplementedError
 
 
 class NumberNode(ASTNode):
-    """数字节点"""
+    """Number node"""
 
     def __init__(self, value: float):
         self.value = value
@@ -401,7 +401,7 @@ class NumberNode(ASTNode):
 
 
 class StringNode(ASTNode):
-    """字符串节点"""
+    """String node"""
 
     def __init__(self, value: str):
         self.value = value
@@ -413,7 +413,7 @@ class StringNode(ASTNode):
 
 
 class BooleanNode(ASTNode):
-    """布尔节点"""
+    """Boolean node"""
 
     def __init__(self, value: bool):
         self.value = value
@@ -425,7 +425,7 @@ class BooleanNode(ASTNode):
 
 
 class NullNode(ASTNode):
-    """空值节点"""
+    """Null node"""
 
     def evaluate(
         self, state: Dict[str, Any], context: Optional[Dict[str, Any]] = None
@@ -434,7 +434,7 @@ class NullNode(ASTNode):
 
 
 class IdentifierNode(ASTNode):
-    """标识符节点 - 引用状态中的值"""
+    """Identifier node - references value in state"""
 
     def __init__(self, name: str):
         self.name = name
@@ -442,11 +442,11 @@ class IdentifierNode(ASTNode):
     def evaluate(
         self, state: Dict[str, Any], context: Optional[Dict[str, Any]] = None
     ) -> Any:
-        # 首先检查是否是上下文中的值（如 signal.payload）
+        # First check if value is in context (e.g., signal.payload)
         if context and self.name in context:
             return context[self.name]
 
-        # 检查是否是特殊变量
+        # Check if special variable
         if self.name == "true":
             return True
         if self.name == "false":
@@ -454,16 +454,16 @@ class IdentifierNode(ASTNode):
         if self.name == "null":
             return None
 
-        # 如果是路径引用（以 $ 开头），使用路径解析器
+        # If path reference (starts with $), use path resolver
         if self.name.startswith("$"):
             return PathResolver.get(state, self.name)
 
-        # 否则作为直接键名查找
+        # Otherwise look up as direct key name
         return state.get(self.name)
 
 
 class ExistsNode(ASTNode):
-    """exists() 函数节点"""
+    """exists() function node"""
 
     def __init__(self, path_node: ASTNode):
         self.path_node = path_node
@@ -478,7 +478,7 @@ class ExistsNode(ASTNode):
 
 
 class LenNode(ASTNode):
-    """len() 函数节点"""
+    """len() function node"""
 
     def __init__(self, path_node: ASTNode):
         self.path_node = path_node
@@ -496,7 +496,7 @@ class LenNode(ASTNode):
 
 
 class ValueNode(ASTNode):
-    """value() 函数节点"""
+    """value() function node"""
 
     def __init__(self, path_node: ASTNode):
         self.path_node = path_node
@@ -511,7 +511,7 @@ class ValueNode(ASTNode):
 
 
 class FunctionNode(ASTNode):
-    """用户定义函数节点"""
+    """User-defined function node"""
 
     def __init__(self, name: str, args: list):
         self.name = name
@@ -523,7 +523,7 @@ class FunctionNode(ASTNode):
         raise NameError(f"Unknown function: {self.name}")
 
 
-# 比较运算符节点
+# Comparison operator nodes
 class EqNode(ASTNode):
     def __init__(self, left: ASTNode, right: ASTNode):
         self.left = left
@@ -626,7 +626,7 @@ class LteNode(ASTNode):
             return False
 
 
-# 逻辑运算符节点（支持短路）
+# Logical operator nodes (with short-circuit support)
 class AndNode(ASTNode):
     def __init__(self, left: ASTNode, right: ASTNode):
         self.left = left
@@ -635,7 +635,7 @@ class AndNode(ASTNode):
     def evaluate(
         self, state: Dict[str, Any], context: Optional[Dict[str, Any]] = None
     ) -> Any:
-        # 短路：左侧为 false 时不求值右侧
+        # Short-circuit: don't evaluate right if left is false
         left = self.left.evaluate(state, context)
         if not left:
             return False
@@ -650,7 +650,7 @@ class OrNode(ASTNode):
     def evaluate(
         self, state: Dict[str, Any], context: Optional[Dict[str, Any]] = None
     ) -> Any:
-        # 短路：左侧为 true 时不求值右侧
+        # Short-circuit: don't evaluate right if left is true
         left = self.left.evaluate(state, context)
         if left:
             return True
@@ -672,12 +672,12 @@ class NotNode(ASTNode):
 
 class ConditionEvaluator:
     """
-    条件表达式求值器
+    Condition Expression Evaluator
 
-    支持 LinJ 14.x 节定义的完整条件表达式语法：
-    - 比较: ==, !=, >, >=, <, <=
-    - 逻辑: AND, OR, NOT (短路)
-    - 函数: exists(path), len(path), value(path)
+    Supports complete condition expression syntax as defined in LinJ 14.x:
+    - Comparisons: ==, !=, >, >=, <, <=
+    - Logical: AND, OR, NOT (short-circuit)
+    - Functions: exists(path), len(path), value(path)
     """
 
     def __init__(self):
@@ -690,21 +690,21 @@ class ConditionEvaluator:
         context: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
-        求值条件表达式
+        Evaluate condition expression
 
         Args:
-            expression: 条件表达式字符串
-            state: 主状态对象
-            context: 额外上下文（如 signal.payload）
+            expression: Condition expression string
+            state: Main state object
+            context: Additional context (e.g., signal.payload)
 
         Returns:
-            布尔值结果
+            Boolean result
 
         Raises:
-            SyntaxError: 表达式语法错误
-            TypeError: 类型不匹配
+            SyntaxError: Expression syntax error
+            TypeError: Type mismatch
         """
-        # 解析并缓存 AST
+        # Parse and cache AST
         if expression not in self._cache:
             parser = Parser(expression)
             self._cache[expression] = parser.parse()
@@ -717,16 +717,16 @@ class ConditionEvaluator:
         return bool(result)
 
     def clear_cache(self) -> None:
-        """清除解析缓存"""
+        """Clear parse cache"""
         self._cache.clear()
 
 
-# 全局求值器实例
+# Global evaluator instance
 _default_evaluator: Optional[ConditionEvaluator] = None
 
 
 def get_evaluator() -> ConditionEvaluator:
-    """获取全局条件求值器实例"""
+    """Get global condition evaluator instance"""
     global _default_evaluator
     if _default_evaluator is None:
         _default_evaluator = ConditionEvaluator()
@@ -737,19 +737,19 @@ def evaluate_condition(
     expression: str, state: Dict[str, Any], context: Optional[Dict[str, Any]] = None
 ) -> bool:
     """
-    便捷函数：求值条件表达式
+    Convenience function: evaluate condition expression
 
     Args:
-        expression: 条件表达式字符串
-        state: 主状态对象
-        context: 额外上下文
+        expression: Condition expression string
+        state: Main state object
+        context: Additional context
 
     Returns:
-        布尔值结果
+        Boolean result
     """
     return get_evaluator().evaluate(expression, state, context)
 
 
 def clear_condition_cache() -> None:
-    """清除条件表达式缓存"""
+    """Clear condition expression cache"""
     get_evaluator().clear_cache()

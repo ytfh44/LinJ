@@ -1,13 +1,14 @@
 """
-CommitManager - 变更提交管理器
+CommitManager - Change Set Submission Manager
 
-实现 LinJ 规范第 20 节、第 24.3 节定义的变更集提交管理：
-- 基准规则: 按 step_id 升序串行接受变更集
-- 只读优化: 空变更集可立即记录完成
-- 非相交优化: 较大 step_id 可提前接受，前提是写入/删除路径与所有未接受的小 step_id 变更集两两不相交
-- 基准修订检查: 提交时检查 base_revision 是否匹配当前状态版本
-- 冲突产生: 冲突时产生 ConflictError
-框架无关的提交管理器实现
+Implements changeset submission management as defined in LinJ Specification Sections 20 and 24.3:
+- Baseline Rule: Accept changesets serially in ascending step_id order
+- Read-only Optimization: Empty changesets can be recorded as completed immediately
+- Non-intersecting Optimization: Larger step_id can be accepted early, provided that
+  write/delete paths are pairwise non-intersecting with all unaccepted smaller step_id changesets
+- Baseline Revision Check: Check if base_revision matches current state version during submission
+- Conflict Generation: ConflictError is generated when conflicts occur
+Framework-agnostic submission manager implementation
 """
 
 import threading
@@ -19,23 +20,23 @@ from pydantic import BaseModel, ConfigDict, Field
 
 @runtime_checkable
 class StateManager(Protocol):
-    """状态管理器协议，用于框架无关的状态管理"""
+    """State manager protocol for framework-agnostic state management"""
 
     def get_full_state(self) -> Dict[str, Any]:
-        """获取完整状态"""
+        """Get the complete state"""
         ...
 
     def get_revision(self) -> int:
-        """获取当前修订版本"""
+        """Get the current revision number"""
         ...
 
     def apply(self, changeset: Any, step_id: Optional[int] = None) -> None:
-        """应用变更集"""
+        """Apply the changeset"""
         ...
 
 
 class LinJError(Exception):
-    """LinJ 规范相关错误基类"""
+    """Base class for LinJ specification-related errors"""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
@@ -43,13 +44,13 @@ class LinJError(Exception):
 
 
 class ConflictError(LinJError):
-    """冲突错误"""
+    """Conflict error"""
 
     pass
 
 
 class PendingStatus(str, Enum):
-    """待提交变更集状态"""
+    """Status of pending changeset submissions"""
 
     PENDING = "pending"
     ACCEPTED = "accepted"
@@ -58,10 +59,10 @@ class PendingStatus(str, Enum):
 
 class PendingChangeSet(BaseModel):
     """
-    待提交的变更集封装
+    Encapsulation of pending changeset submissions
 
-    包含变更集元数据及提交状态跟踪
-    框架无关的实现
+    Contains changeset metadata and submission status tracking
+    Framework-agnostic implementation
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -75,10 +76,10 @@ class PendingChangeSet(BaseModel):
 
 class CommitResult(BaseModel):
     """
-    提交结果
+    Submission result
 
-    记录变更集提交的完整结果
-    框架无关的实现
+    Records the complete result of changeset submission
+    Framework-agnostic implementation
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -91,78 +92,78 @@ class CommitResult(BaseModel):
 
 @runtime_checkable
 class ChangeSet(Protocol):
-    """变更集协议，用于框架无关的变更集操作"""
+    """Changeset protocol for framework-agnostic changeset operations"""
 
     def is_empty(self) -> bool:
-        """检查变更集是否为空"""
+        """Check if changeset is empty"""
         ...
 
     def intersects_with(self, other: Any) -> bool:
-        """检查是否与另一个变更集相交"""
+        """Check if it intersects with another changeset"""
         ...
 
     def apply_to_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """将变更集应用到状态"""
+        """Apply changeset to state"""
         ...
 
 
 class CommitManager:
     """
-    变更提交管理器
+    Change Submission Manager
 
-    实现 24.3 节定义的决定性提交规则：
-    - 基准规则：按 step_id 升序串行接受
-    - 只读优化：空变更集可立即接受
-    - 非相交优化：不相交变更集可提前接受
+    Implements the definitive submission rules defined in Section 24.3:
+    - Baseline Rule: Accept serially in ascending step_id order
+    - Read-only Optimization: Empty changesets can be accepted immediately
+    - Non-intersecting Optimization: Non-intersecting changesets can be accepted early
 
-    线程安全：所有队列操作受锁保护
-    框架无关的提交管理器实现
+    Thread-safe: All queue operations are protected by locks
+    Framework-agnostic submission manager implementation
     """
 
     def __init__(self, state_manager: StateManager):
         """
-        初始化提交管理器
+        Initialize the submission manager
 
         Args:
-            state_manager: 状态管理器，用于应用变更集
+            state_manager: State manager used to apply changesets
         """
         self._state_manager = state_manager
         self._pending: Dict[int, PendingChangeSet] = {}  # step_id -> pending
-        self._accepted_step_ids: Set[int] = set()  # 已接受的 step_id
-        self._next_expected_step: int = 1  # 下一个期望的 step_id
-        self._lock = threading.RLock()  # 可重入锁，保护队列操作
+        self._accepted_step_ids: Set[int] = set()  # accepted step_id
+        self._next_expected_step: int = 1  # next expected step_id
+        self._lock = threading.RLock()  # reentrant lock for queue operations
         self._results: Dict[int, CommitResult] = {}  # step_id -> result
 
     def submit(
         self, step_id: int, base_revision: int, changeset: Any, handle: str
     ) -> CommitResult:
         """
-        提交变更集
+        Submit a changeset
 
-        流程：
-        1. 检查基准修订是否匹配
-        2. 若变更集为空 → 立即接受（只读优化）
-        3. 检查是否与待提交队列中的变更集相交
-        4. 若 step_id == next_expected → 直接应用
-        5. 若 step_id > next_expected 且不相交 → 非相交优化允许提前接受
-        6. 否则 → 加入待处理队列
+        Process:
+        1. Check if baseline revision matches
+        2. If changeset is empty -> Accept immediately (read-only optimization)
+        3. Check if it intersects with changesets in the pending queue
+        4. If step_id == next_expected -> Apply directly
+        5. If step_id > next_expected and non-intersecting -> Non-intersecting optimization allows early acceptance
+        6. Otherwise -> Add to pending queue
 
         Args:
-            step_id: 步骤 ID
-            base_revision: 基准修订版本
-            changeset: 变更集
-            handle: 续体句柄
+            step_id: Step ID
+            base_revision: Baseline revision number
+            changeset: Changeset
+            handle: Continuation handle
 
         Returns:
-            CommitResult: 提交结果
+            CommitResult: Submission result
         """
         with self._lock:
-            # 检查是否已提交
+            # Check if already submitted
             if step_id in self._results:
                 return self._results[step_id]
 
-            # 基准修订检查 (24.3 节)
-            # 提交时，base_revision 必须等于当前 revision
+            # Baseline revision check (Section 24.3)
+            # During submission, base_revision must equal current revision
             current_revision = self._state_manager.get_revision()
             if base_revision != current_revision:
                 error = ConflictError(
@@ -177,7 +178,7 @@ class CommitManager:
                 self._results[step_id] = result
                 return result
 
-            # 创建待提交记录
+            # Create pending submission record
             pending = PendingChangeSet(
                 step_id=step_id,
                 base_revision=base_revision,
@@ -185,30 +186,30 @@ class CommitManager:
                 continuation_handle=handle,
             )
 
-            # 只读优化：空变更集立即接受
+            # Read-only optimization: Empty changeset accepted immediately
             if self._is_changeset_empty(changeset):
                 pending.status = PendingStatus.ACCEPTED
                 self._pending[step_id] = pending
                 self._accepted_step_ids.add(step_id)
 
-                # 更新 next_expected
+                # Update next_expected
                 if step_id == self._next_expected_step:
                     self._update_next_expected()
 
                 result = CommitResult(
                     success=True,
                     step_id=step_id,
-                    new_revision=current_revision,  # 空变更集不改变版本
+                    new_revision=current_revision,  # Empty changeset does not change revision
                 )
                 self._results[step_id] = result
 
-                # 尝试处理队列
+                # Try to process queue
                 self._process_queue_internal()
                 return result
 
-            # 检查是否可以接受
+            # Check if can be accepted
             if self.can_accept(step_id, changeset):
-                # 应用变更集
+                # Apply changeset
                 try:
                     self._state_manager.apply(changeset, step_id)
                     new_revision = self._state_manager.get_revision()
@@ -217,7 +218,7 @@ class CommitManager:
                     self._pending[step_id] = pending
                     self._accepted_step_ids.add(step_id)
 
-                    # 更新 next_expected
+                    # Update next_expected
                     if step_id == self._next_expected_step:
                         self._update_next_expected()
 
@@ -236,13 +237,13 @@ class CommitManager:
 
                 self._results[step_id] = result
 
-                # 尝试处理队列
+                # Try to process queue
                 if result.success:
                     self._process_queue_internal()
 
                 return result
             else:
-                # 加入待处理队列
+                # Add to pending queue
                 self._pending[step_id] = pending
 
                 result = CommitResult(
@@ -253,39 +254,116 @@ class CommitManager:
                         {"step_id": step_id, "next_expected": self._next_expected_step},
                     ),
                 )
-                # 注意：这里不记录结果，因为还未最终处理
+                # Note: Result is not recorded here as it has not been finally processed
+                return result
+
+            # Create pending submission record
+            pending = PendingChangeSet(
+                step_id=step_id,
+                base_revision=base_revision,
+                changeset=changeset,
+                continuation_handle=handle,
+            )
+
+            # Read-only optimization: Empty changeset accepted immediately
+            if self._is_changeset_empty(changeset):
+                pending.status = PendingStatus.ACCEPTED
+                self._pending[step_id] = pending
+                self._accepted_step_ids.add(step_id)
+
+                # Update next_expected
+                if step_id == self._next_expected_step:
+                    self._update_next_expected()
+
+                result = CommitResult(
+                    success=True,
+                    step_id=step_id,
+                    new_revision=current_revision,  # Empty changeset does not change revision
+                )
+                self._results[step_id] = result
+
+                # Try to process queue
+                self._process_queue_internal()
+                return result
+
+            # Check if can be accepted
+            if self.can_accept(step_id, changeset):
+                # Apply changeset
+                try:
+                    self._state_manager.apply(changeset, step_id)
+                    new_revision = self._state_manager.get_revision()
+
+                    pending.status = PendingStatus.ACCEPTED
+                    self._pending[step_id] = pending
+                    self._accepted_step_ids.add(step_id)
+
+                    # Update next_expected
+
+                    result = CommitResult(
+                        success=True, step_id=step_id, new_revision=new_revision
+                    )
+                except Exception as e:
+                    pending.status = PendingStatus.REJECTED
+                    self._pending[step_id] = pending
+
+                    error = ConflictError(
+                        f"Failed to apply changeset: {str(e)}",
+                        {"step_id": step_id, "error": str(e)},
+                    )
+                    result = CommitResult(success=False, step_id=step_id, error=error)
+
+                self._results[step_id] = result
+
+                # Try to process queue
+                if result.success:
+                    self._process_queue_internal()
+
+                return result
+            else:
+                # Add to pending queue
+                self._pending[step_id] = pending
+
+                result = CommitResult(
+                    success=False,
+                    step_id=step_id,
+                    error=ConflictError(
+                        f"Changeset {step_id} cannot be accepted yet, queued for processing",
+                        {"step_id": step_id, "next_expected": self._next_expected_step},
+                    ),
+                )
+                # Note: Result is not recorded here as it has not been finally processed
                 return result
 
     def can_accept(self, step_id: int, changeset: Any) -> bool:
         """
-        检查变更集是否可以被接受
+        Check if changeset can be accepted
 
-        规则：
-        1. 若 step_id == next_expected → 可以接受
-        2. 若 step_id > next_expected 且所有更小的 step_id 都已提交（在 pending 中）
-           且与它们都不相交 → 可以接受（非相交优化）
+        Rules:
+        1. If step_id == next_expected -> Can accept
+        2. If step_id > next_expected and all smaller step_ids are submitted (in pending)
+           and non-intersecting with them -> Can accept (non-intersecting optimization)
 
         Args:
-            step_id: 步骤 ID
-            changeset: 变更集
+            step_id: Step ID
+            changeset: Changeset
 
         Returns:
-            bool: 是否可以接受
+            bool: Whether it can be accepted
         """
         with self._lock:
-            # 基准规则：按 step_id 升序串行接受
+            # Baseline rule: Accept serially in ascending step_id order
             if step_id == self._next_expected_step:
                 return True
 
-            # 非相交优化：检查是否可以提前接受
+            # Non-intersecting optimization: Check if can be accepted early
             if step_id > self._next_expected_step:
-                # 检查所有更小的 step_id 是否都已提交（在 pending 中）
+                # Check if all smaller step_ids are submitted (in pending)
                 for sid in range(self._next_expected_step, step_id):
                     if sid not in self._pending:
-                        # 有更小的 step_id 尚未提交，无法判断是否相交
+                        # Smaller step_id not yet submitted, cannot determine intersection
                         return False
 
-                # 所有更小的 step_id 都已提交，检查是否与它们相交
+                # All smaller step_ids are submitted, check if intersecting with them
                 if not self._check_intersection_with_pending(step_id, changeset):
                     return True
 
@@ -293,60 +371,60 @@ class CommitManager:
 
     def _is_changeset_empty(self, changeset: Any) -> bool:
         """
-        检查变更集是否为空
+        Check if changeset is empty
 
-        框架无关的空检查实现
+        Framework-agnostic empty check implementation
         """
-        # 检查是否有 is_empty 方法
+        # Check if is_empty method exists
         if hasattr(changeset, "is_empty"):
             return changeset.is_empty()
 
-        # 检查是否是空字典
+        # Check if it's an empty dict
         if isinstance(changeset, dict):
             return len(changeset) == 0
 
-        # 检查是否是空列表
+        # Check if it's an empty list
         if isinstance(changeset, list):
             return len(changeset) == 0
 
-        # 检查是否是 None
+        # Check if it's None
         if changeset is None:
             return True
 
-        # 默认情况下认为非空
+        # Default to non-empty
         return False
 
     def _changesets_intersect(self, changeset1: Any, changeset2: Any) -> bool:
         """
-        检查两个变更集是否相交
+        Check if two changesets intersect
 
-        框架无关的相交检查实现
+        Framework-agnostic intersection check implementation
         """
-        # 检查是否有 intersects_with 方法
+        # Check if intersects_with method exists
         if hasattr(changeset1, "intersects_with"):
             return changeset1.intersects_with(changeset2)
 
-        # 简单的相交检查：如果都是字典，检查是否有重叠的键
+        # Simple intersection check: If both are dicts, check for overlapping keys
         if isinstance(changeset1, dict) and isinstance(changeset2, dict):
             return bool(set(changeset1.keys()) & set(changeset2.keys()))
 
-        # 默认情况下认为相交（保守策略）
+        # Default to intersecting (conservative strategy)
         return True
 
     def _check_intersection_with_pending(self, step_id: int, changeset: Any) -> bool:
         """
-        检查变更集与所有待接受的小 step_id 变更集是否相交
+        Check if changeset intersects with all pending smaller step_id changesets
 
-        按 11.4 节规则判定写入/删除路径相交
+        Determine write/delete path intersection according to Section 11.4 rules
 
         Args:
-            step_id: 步骤 ID
-            changeset: 变更集
+            step_id: Step ID
+            changeset: Changeset
 
         Returns:
-            bool: 是否与任意待处理变更集相交（True = 相交）
+            bool: Whether it intersects with any pending changeset (True = intersects)
         """
-        # 获取所有 step_id 更小且未接受的待处理变更集
+        # Get all pending changesets with smaller step_id that are not accepted
         for other_step_id, pending in self._pending.items():
             if other_step_id < step_id and pending.status == PendingStatus.PENDING:
                 if self._changesets_intersect(changeset, pending.changeset):
@@ -356,18 +434,18 @@ class CommitManager:
 
     def process_queue(self) -> List[CommitResult]:
         """
-        处理待提交队列
+        Process pending submission queue
 
-        按规则处理队列中的变更集，返回所有新处理的结果
+        Process changesets in queue according to rules, return all newly processed results
 
         Returns:
-            List[CommitResult]: 本次处理产生的所有结果
+            List[CommitResult]: All results generated from this processing
         """
         with self._lock:
             results = []
 
             while True:
-                # 按 step_id 排序检查所有处于 PENDING 状态的项
+                # Check all items in PENDING status sorted by step_id
                 pending_steps = sorted(
                     [
                         sid
@@ -381,7 +459,7 @@ class CommitManager:
                 for step_id in pending_steps:
                     pending = self._pending[step_id]
 
-                    # 检查基准修订是否仍然有效
+                    # Check if baseline revision is still valid
                     current_revision = self._state_manager.get_revision()
                     if pending.base_revision < current_revision:
                         if self._check_intersection_since_revision(
@@ -402,14 +480,14 @@ class CommitManager:
                             processed_any = True
                             continue
                     elif pending.base_revision > current_revision:
-                        # 这种情况通常不应发生，除非状态被回滚
+                        # This situation normally shouldn't happen unless state was rolled back
                         continue
 
-                    # 检查是否可以接受
+                    # Check if can be accepted
                     if self.can_accept(step_id, pending.changeset):
                         try:
                             if self._is_changeset_empty(pending.changeset):
-                                # 空变更集，只更新状态
+                                # Empty changeset, only update status
                                 pending.status = PendingStatus.ACCEPTED
                                 self._accepted_step_ids.add(step_id)
 
@@ -422,7 +500,7 @@ class CommitManager:
                                     new_revision=current_revision,
                                 )
                             else:
-                                # 应用变更集
+                                # Apply changeset
                                 self._state_manager.apply(pending.changeset, step_id)
                                 new_revision = self._state_manager.get_revision()
 
@@ -452,14 +530,14 @@ class CommitManager:
                         results.append(result)
                         processed_any = True
 
-                # 如果没有处理任何变更集，退出循环
+                # If no changesets were processed, exit loop
                 if not processed_any:
                     break
 
             return results
 
     def _process_queue_internal(self) -> None:
-        """内部方法：处理队列（必须在锁内调用）"""
+        """Internal method: Process queue (must be called within lock)"""
         while True:
             pending_steps = sorted(
                 [
@@ -474,7 +552,7 @@ class CommitManager:
             for step_id in pending_steps:
                 pending = self._pending[step_id]
 
-                # 检查基准修订
+                # Check baseline revision
                 current_revision = self._state_manager.get_revision()
                 if pending.base_revision < current_revision:
                     if self._check_intersection_since_revision(
@@ -495,7 +573,7 @@ class CommitManager:
                 elif pending.base_revision > current_revision:
                     continue
 
-                # 检查是否可以接受
+                # Check if can be accepted
                 if self.can_accept(step_id, pending.changeset):
                     try:
                         if self._is_changeset_empty(pending.changeset):
@@ -543,19 +621,19 @@ class CommitManager:
         self, base_revision: int, changeset: Any
     ) -> bool:
         """
-        检查变更集是否与自 base_revision 以来已应用的所有变更集相交
+        Check if changeset intersects with all applied changesets since base_revision
 
-        用于确定是否可以将旧版本的 ChangeSet 应用于新版本状态
+        Used to determine if an older version ChangeSet can be applied to a newer version state
         """
-        # 我们需要找到所有 new_revision > base_revision 的已接受变更集
-        # 这些变更集已经存在于 self._results 中
+        # We need to find all accepted changesets with new_revision > base_revision
+        # These changesets already exist in self._results
         for step_id, result in self._results.items():
             if (
                 result.success
                 and result.new_revision
                 and result.new_revision > base_revision
             ):
-                # 获取该 step_id 对应的变更集
+                # Get the changeset corresponding to that step_id
                 if step_id in self._pending:
                     other_cs = self._pending[step_id].changeset
                     if self._changesets_intersect(changeset, other_cs):
@@ -563,16 +641,16 @@ class CommitManager:
         return False
 
     def _update_next_expected(self) -> None:
-        """更新 next_expected_step（必须在锁内调用）"""
+        """Update next_expected_step (must be called within lock)"""
         while self._next_expected_step in self._accepted_step_ids:
             self._next_expected_step += 1
 
     def get_pending(self) -> List[PendingChangeSet]:
         """
-        获取所有待处理的变更集
+        Get all pending changesets
 
         Returns:
-            List[PendingChangeSet]: 待处理变更集列表（按 step_id 排序）
+            List[PendingChangeSet]: Pending changeset list (sorted by step_id)
         """
         with self._lock:
             return sorted(
@@ -586,33 +664,33 @@ class CommitManager:
 
     def get_result(self, step_id: int) -> Optional[CommitResult]:
         """
-        获取指定 step_id 的提交结果
+        Get the submission result for a specific step_id
 
         Args:
-            step_id: 步骤 ID
+            step_id: Step ID
 
         Returns:
-            Optional[CommitResult]: 提交结果，若未处理则返回 None
+            Optional[CommitResult]: Submission result, or None if not processed
         """
         with self._lock:
             return self._results.get(step_id)
 
     def get_accepted_count(self) -> int:
         """
-        获取已接受的变更集数量
+        Get the count of accepted changesets
 
         Returns:
-            int: 已接受数量
+            int: Accepted count
         """
         with self._lock:
             return len(self._accepted_step_ids)
 
     def get_pending_count(self) -> int:
         """
-        获取待处理的变更集数量
+        Get the count of pending changesets
 
         Returns:
-            int: 待处理数量
+            int: Pending count
         """
         with self._lock:
             return len(
@@ -625,10 +703,10 @@ class CommitManager:
 
     def is_all_accepted(self) -> bool:
         """
-        检查所有已提交的变更集是否都被接受
+        Check if all submitted changesets have been accepted
 
         Returns:
-            bool: 是否全部接受
+            bool: Whether all are accepted
         """
         with self._lock:
             total = len(self._pending)
@@ -637,9 +715,9 @@ class CommitManager:
 
     def reset(self) -> None:
         """
-        重置提交管理器状态
+        Reset submission manager state
 
-        清除所有待处理和已接受的状态
+        Clear all pending and accepted states
         """
         with self._lock:
             self._pending.clear()

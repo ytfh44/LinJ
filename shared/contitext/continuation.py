@@ -1,8 +1,8 @@
 """
-Continuation - 续体
+Continuation
 
-实现 LinJ 规范第 17-18 节的续体状态和行为
-框架无关的续体实现，支持跨框架使用
+Implements continuation state and behavior for LinJ specification sections 17-18
+Framework-agnostic continuation implementation, supports cross-framework usage
 """
 
 import uuid
@@ -13,15 +13,15 @@ from copy import deepcopy
 
 from pydantic import BaseModel, Field, ConfigDict
 
-# 导入路径解析器
+# Import path resolver
 from ..core.path import PathResolver
 
 
 class HandleExpired(Exception):
     """
-    续体句柄过期错误 (17.2 节)
+    Continuation handle expired error (section 17.2)
 
-    当尝试访问已过期的续体句柄时抛出
+    Raised when attempting to access an expired continuation handle
     """
 
     def __init__(self, handle: str, details: Optional[Dict[str, Any]] = None):
@@ -32,23 +32,23 @@ class HandleExpired(Exception):
 
 @runtime_checkable
 class StateManager(Protocol):
-    """状态管理器协议，用于框架无关的状态管理"""
+    """State manager protocol for framework-agnostic state management"""
 
     def get_full_state(self) -> Dict[str, Any]:
-        """获取完整状态"""
+        """Get the full state"""
         ...
 
     def get_revision(self) -> int:
-        """获取当前修订版本"""
+        """Get the current revision"""
         ...
 
     def apply(self, changeset: Any, step_id: Optional[int] = None) -> None:
-        """应用变更集"""
+        """Apply a changeset"""
         ...
 
 
 class Status(str, Enum):
-    """续体状态 (18.1 节)"""
+    """Continuation status (section 18.1)"""
 
     RUNNING = "running"
     SUSPENDED = "suspended"
@@ -59,10 +59,10 @@ class Status(str, Enum):
 
 class ContinuationView:
     """
-    续体视图 (18.2 节)
+    Continuation view (section 18.2)
 
-    为续体提供对主状态对象的受控视图
-    框架无关的视图实现
+    Provides a controlled view of the main state object for the continuation
+    Framework-agnostic view implementation
     """
 
     def __init__(
@@ -72,12 +72,12 @@ class ContinuationView:
         pending_changes: Optional[List[Any]] = None,
     ):
         """
-        创建续体视图
+        Create a continuation view
 
         Args:
-            state_manager: 状态管理器
-            step_id: 当前步骤 ID
-            pending_changes: 待提交的变更集列表
+            state_manager: State manager
+            step_id: Current step ID
+            pending_changes: List of changesets to be committed
         """
         self._state_manager = state_manager
         self._step_id = step_id
@@ -85,50 +85,50 @@ class ContinuationView:
 
     def read(self, path: str) -> Any:
         """
-        读取路径值 (5.2 节)
+        Read path value (section 5.2)
 
-        按 LinJ 规范：读取不存在路径时返回空值（null）
-        支持 $.a.b 路径语法和 [n] 数组下标
+        Per LinJ spec: returns null when reading a non-existent path
+        Supports $.a.b path syntax and [n] array index
 
         Args:
-            path: 状态路径，如 "$.a.b" 或 "$.arr[0]"
+            path: State path, e.g. "$.a.b" or "$.arr[0]"
 
         Returns:
-            路径对应的值，不存在则返回 None
+            The value at the path, or None if not found
         """
         state = self._state_manager.get_full_state()
         return PathResolver.get(state, path)
 
     def value(self, path: str) -> Any:
         """
-        获取路径值 (14.1 节)
+        Get path value (section 14.1)
 
-        与 read() 相同，用于条件表达式求值
+        Same as read(), used for conditional expression evaluation
 
         Args:
-            path: 状态路径
+            path: State path
 
         Returns:
-            路径对应的值，不存在则返回 None
+            The value at the path, or None if not found
         """
         return self.read(path)
 
     def exists(self, path: str) -> bool:
-        """检查路径是否存在且非 null"""
+        """Check if the path exists and is not null"""
         return self.value(path) is not None
 
     def len(self, path: str) -> int:
         """
-        获取数组长度 (14.1 节)
+        Get array length (section 14.1)
 
-        返回数组的物理长度（包含尾部 null）
-        非数组或不存在则返回 0
+        Returns the physical length of the array (including trailing null)
+        Returns 0 for non-arrays or non-existent paths
 
         Args:
-            path: 状态路径
+            path: State path
 
         Returns:
-            数组长度，非数组或不存在返回 0
+            Array length, 0 for non-arrays or non-existent
         """
         value = self.read(path)
         if isinstance(value, list):
@@ -137,27 +137,27 @@ class ContinuationView:
 
     def get_full_state(self) -> Dict[str, Any]:
         """
-        获取完整状态（深拷贝）
+        Get the full state (deep copy)
 
-        应用所有待提交的变更集来构造当前视图状态
-        确保视图反映与当前 step_id 对应的逻辑快照
+        Applies all pending changesets to construct the current view state
+        Ensures the view reflects the logical snapshot corresponding to the current step_id
 
         Returns:
-            包含所有待提交变更的完整状态深拷贝
+            Deep copy of the full state with all pending changes applied
         """
         state = self._state_manager.get_full_state()
 
-        # 应用待提交的变更集来构造当前视图状态
-        # 18.2 节：视图必须不包含 step_id 大于等于本次尝试的变更集效果
+        # Apply pending changesets to construct the current view state
+        # Section 18.2: view must not include changesets with step_id >= current attempt
         for changeset in self._pending_changes:
             if hasattr(changeset, "apply_to"):
-                # 使用 ChangeSet 的 apply_to 方法
+                # Use ChangeSet's apply_to method
                 changeset.apply_to(state)
             elif hasattr(changeset, "apply_to_state"):
-                # 使用协议的 apply_to_state 方法
+                # Use protocol's apply_to_state method
                 state = changeset.apply_to_state(state)
             elif isinstance(changeset, dict):
-                # 简单的字典更新（向后兼容）
+                # Simple dict update (backward compatible)
                 if "writes" in changeset:
                     for write in changeset["writes"]:
                         PathResolver.set(state, write["path"], write["value"])
@@ -168,17 +168,17 @@ class ContinuationView:
         return deepcopy(state)
 
     def propose_changeset(self, changeset: Any) -> None:
-        """提议变更集（用于挂起时）"""
+        """Propose a changeset (used when suspended)"""
         self._pending_changes.append(changeset)
 
 
 class Continuation(BaseModel):
     """
-    续体
+    Continuation
 
-    17.1 节：每个续体拥有唯一 handle，可序列化为字符串
-    18.1 节：包含 status, local_state, view
-    框架无关的续体实现
+    Section 17.1: Each continuation has a unique handle, serializable to string
+    Section 18.1: Contains status, local_state, view
+    Framework-agnostic continuation implementation
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -190,29 +190,29 @@ class Continuation(BaseModel):
     base_revision: int = 0
     parent_handle: Optional[str] = None
 
-    # 执行结果
+    # Execution result
     result: Optional[Any] = None
     error: Optional[str] = None
 
-    # 挂起时产生的变更集
+    # Changeset generated when suspended
     pending_changeset: Optional[Any] = None
 
-    # 过期时间戳（毫秒），None 表示永不过期
+    # Expiration timestamp in milliseconds, None means never expires
     expires_at_ms: Optional[int] = None
 
-    # 视图（运行时设置，不序列化）
+    # View (runtime set, not serialized)
     view: Optional[ContinuationView] = Field(default=None, exclude=True)
 
     def is_active(self) -> bool:
-        """检查续体是否仍处于活动状态"""
+        """Check if the continuation is still in an active state"""
         return self.status in (Status.RUNNING, Status.SUSPENDED)
 
     def is_terminal(self) -> bool:
-        """检查续体是否已到达终态"""
+        """Check if the continuation has reached a terminal state"""
         return self.status in (Status.COMPLETED, Status.FAILED, Status.CANCELLED)
 
     def can_submit_changes(self) -> bool:
-        """检查是否可以提交变更 (19.5 节：取消后不得提交)"""
+        """Check if changes can be submitted (section 19.5: cannot submit after cancellation)"""
         return self.status != Status.CANCELLED
 
     def create_view(
@@ -221,23 +221,23 @@ class Continuation(BaseModel):
         pending_changes: Optional[List[Any]] = None,
     ) -> ContinuationView:
         """
-        创建或更新续体视图
+        Create or update the continuation view
 
         Args:
-            state_manager: 状态管理器
-            pending_changes: 待提交的变更集列表
+            state_manager: State manager
+            pending_changes: List of changesets to be committed
 
         Returns:
-            续体视图
+            Continuation view
         """
         self.view = ContinuationView(state_manager, self.step_id, pending_changes)
         return self.view
 
     def get_logical_snapshot(self) -> Dict[str, Any]:
         """
-        获取逻辑快照 (18.2 节)
+        Get the logical snapshot (section 18.2)
 
-        返回与 step_id 对应的状态快照
+        Returns the state snapshot corresponding to the step_id
         """
         if self.view:
             return self.view.get_full_state()
@@ -245,29 +245,29 @@ class Continuation(BaseModel):
 
     def update_step_id(self, new_step_id: int) -> None:
         """
-        更新 step_id 并重新创建视图
+        Update step_id and recreate the view
 
         Args:
-            new_step_id: 新的步骤 ID
+            new_step_id: New step ID
         """
         self.step_id = new_step_id
-        # 视图会在下次访问时重新创建
+        # View will be recreated on next access
 
 
 class ContinuationRegistry:
     """
-    续体注册表
+    Continuation registry
 
-    管理续体的注册和过期处理
-    框架无关的注册表实现
+    Manages continuation registration and expiration handling
+    Framework-agnostic registry implementation
     """
 
     def __init__(self, default_ttl_ms: Optional[int] = None):
         """
-        初始化注册表
+        Initialize the registry
 
         Args:
-            default_ttl_ms: 默认生存时间（毫秒），None 表示永不过期
+            default_ttl_ms: Default time-to-live in milliseconds, None means never expires
         """
         self._continuations: Dict[str, Continuation] = {}
         self._expiry_times: Dict[str, float] = {}  # handle -> expiry timestamp
@@ -279,15 +279,15 @@ class ContinuationRegistry:
         ttl_ms: Optional[int] = None,
     ) -> None:
         """
-        注册续体
+        Register a continuation
 
         Args:
-            continuation: 要注册的续体
-            ttl_ms: 生存时间（毫秒），使用默认值如果为 None
+            continuation: Continuation to register
+            ttl_ms: Time-to-live in milliseconds, uses default if None
         """
         self._continuations[continuation.handle] = continuation
 
-        # 设置过期时间
+        # Set expiration time
         if ttl_ms is not None or self._default_ttl_ms is not None:
             effective_ttl = ttl_ms if ttl_ms is not None else self._default_ttl_ms
             expiry_time = time.time() * 1000 + effective_ttl
@@ -295,25 +295,25 @@ class ContinuationRegistry:
 
     def get(self, handle: str) -> Continuation:
         """
-        获取续体
+        Get a continuation
 
         Args:
-            handle: 续体句柄
+            handle: Continuation handle
 
         Returns:
-            续体对象
+            Continuation object
 
         Raises:
-            HandleExpired: 句柄不存在或已过期
+            HandleExpired: Handle not found or expired
         """
-        # 检查是否存在
+        # Check if exists
         if handle not in self._continuations:
             raise HandleExpired(handle, {"reason": "not_found"})
 
-        # 检查是否过期
+        # Check if expired
         if handle in self._expiry_times:
             if time.time() * 1000 > self._expiry_times[handle]:
-                # 清理过期续体
+                # Clean up expired continuation
                 del self._continuations[handle]
                 del self._expiry_times[handle]
                 raise HandleExpired(
@@ -325,13 +325,13 @@ class ContinuationRegistry:
 
     def remove(self, handle: str) -> bool:
         """
-        移除续体
+        Remove a continuation
 
         Args:
-            handle: 续体句柄
+            handle: Continuation handle
 
         Returns:
-            是否成功移除
+            True if successfully removed
         """
         if handle in self._continuations:
             del self._continuations[handle]
@@ -341,7 +341,7 @@ class ContinuationRegistry:
         return False
 
     def is_expired(self, handle: str) -> bool:
-        """检查句柄是否已过期"""
+        """Check if the handle has expired"""
         if handle not in self._continuations:
             return True
         if handle in self._expiry_times:
@@ -349,7 +349,7 @@ class ContinuationRegistry:
         return False
 
     def cleanup_expired(self) -> int:
-        """清理所有过期的续体，返回清理数量"""
+        """Clean up all expired continuations, returns the count cleaned"""
         now = time.time() * 1000
         expired_handles = [h for h, t in self._expiry_times.items() if t <= now]
 
@@ -359,10 +359,10 @@ class ContinuationRegistry:
         return len(expired_handles)
 
     def count(self) -> int:
-        """获取注册续体数量"""
+        """Get the number of registered continuations"""
         return len(self._continuations)
 
     def clear(self) -> None:
-        """清除所有注册"""
+        """Clear all registrations"""
         self._continuations.clear()
         self._expiry_times.clear()

@@ -1,14 +1,15 @@
 """
-LinJ/ContiText 异常定义
+LinJ/ContiText Exception Definitions
 
-按规范定义各类错误，包括 ValidationError, ExecutionError, MappingError, ConditionError 等
+Define various error types according to specifications, including ValidationError,
+ExecutionError, MappingError, ConditionError, etc.
 """
 
 from typing import Any, Dict, Optional
 
 
 class LinJError(Exception):
-    """LinJ 基础异常"""
+    """LinJ base exception"""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message)
@@ -18,9 +19,10 @@ class LinJError(Exception):
 
 class ValidationError(LinJError):
     """
-    验证错误
+    Validation error
 
-    发生在文档验证阶段，如版本不匹配、必填字段缺失、循环无界等
+    Occurs during document validation phase, such as version mismatch, missing
+    required fields, unbounded loops, etc.
     """
 
     pass
@@ -28,9 +30,10 @@ class ValidationError(LinJError):
 
 class ExecutionError(LinJError):
     """
-    执行错误
+    Execution error
 
-    发生在节点执行阶段，如工具调用失败、状态超限等
+    Occurs during node execution phase, such as tool invocation failure,
+    state limit exceeded, etc.
     """
 
     pass
@@ -38,9 +41,10 @@ class ExecutionError(LinJError):
 
 class MappingError(LinJError):
     """
-    状态映射错误
+    State mapping error
 
-    发生在路径写入时，如中间位置不是对象、数组越界无法扩容等
+    Occurs during path writing, such as intermediate position is not an object,
+    array out-of-bounds and cannot expand, etc.
     """
 
     pass
@@ -48,9 +52,9 @@ class MappingError(LinJError):
 
 class ConditionError(LinJError):
     """
-    条件表达式错误
+    Condition expression error
 
-    发生在条件求值时，如类型不匹配、语法错误等
+    Occurs during condition evaluation, such as type mismatch, syntax error, etc.
     """
 
     pass
@@ -58,9 +62,10 @@ class ConditionError(LinJError):
 
 class ConflictError(LinJError):
     """
-    变更集冲突错误
+    Change set conflict error
 
-    发生在变更集提交时，如写入路径相交、版本不匹配等
+    Occurs during change set commit, such as overlapping write paths,
+    version mismatch, etc.
     """
 
     pass
@@ -68,9 +73,9 @@ class ConflictError(LinJError):
 
 class HandleExpired(LinJError):
     """
-    续体句柄过期错误
+    Continuation handle expired error
 
-    发生在恢复续体时，句柄已过期或无效
+    Occurs during continuation recovery, handle has expired or is invalid
     """
 
     pass
@@ -78,9 +83,9 @@ class HandleExpired(LinJError):
 
 class ResourceConstraintUnsatisfied(ValidationError):
     """
-    资源约束未满足错误
+    Resource constraint unsatisfied error
 
-    当 placement 或 resource 依赖无法满足时
+    When placement or resource dependencies cannot be satisfied
     """
 
     pass
@@ -88,9 +93,9 @@ class ResourceConstraintUnsatisfied(ValidationError):
 
 class InvalidRequirements(ValidationError):
     """
-    requirements 格式错误
+    Invalid requirements format
 
-    当 requirements 字段值不为布尔类型时
+    When requirements field value is not a boolean type
     """
 
     pass
@@ -98,9 +103,9 @@ class InvalidRequirements(ValidationError):
 
 class InvalidPlacement(ValidationError):
     """
-    placement 格式错误
+    Invalid placement format
 
-    当 placement 声明无效或无法满足时
+    When placement declaration is invalid or cannot be satisfied
     """
 
     pass
@@ -108,9 +113,9 @@ class InvalidPlacement(ValidationError):
 
 class ContractViolation(LinJError):
     """
-    合同违反错误
+    Contract violation error
 
-    当输出不满足 out_contract 时
+    When output does not satisfy out_contract
     """
 
     pass

@@ -1,7 +1,7 @@
 """
-执行后端抽象接口
+Execution Backend Abstract Interface
 
-定义执行引擎的核心接口，支持多后端扩展。
+Defines the core interface for execution engines, supporting multi-backend extensions.
 """
 
 from abc import ABC, abstractmethod
@@ -21,12 +21,12 @@ from .types import (
 
 class ExecutionBackend(ABC):
     """
-    执行后端抽象接口
+    Execution Backend Abstract Interface
 
-    定义所有执行引擎必须实现的核心功能，支持多种执行模式：
-    - 同步/异步执行
-    - 单节点/批量节点执行
-    - 状态管理和追踪
+    Defines the core functionality that all execution engines must implement, supporting multiple execution modes:
+    - Synchronous/asynchronous execution
+    - Single-node/batch-node execution
+    - State management and tracking
     """
 
     @abstractmethod
@@ -37,15 +37,15 @@ class ExecutionBackend(ABC):
         tools: Optional[Dict[str, AsyncCallable]] = None,
     ) -> ExecutionResult:
         """
-        执行单个节点
+        Execute a single node
 
         Args:
-            node: 要执行的节点对象
-            context: 执行上下文
-            tools: 可用的工具函数集合
+            node: The node object to execute
+            context: The execution context
+            tools: Available tool function collection
 
         Returns:
-            执行结果
+            The execution result
         """
         pass
 
@@ -58,99 +58,99 @@ class ExecutionBackend(ABC):
         max_concurrency: Optional[int] = None,
     ) -> List[ExecutionResult]:
         """
-        批量执行节点
+        Execute nodes in batch
 
         Args:
-            nodes: 要执行的节点列表
-            context: 执行上下文
-            tools: 可用的工具函数集合
-            max_concurrency: 最大并发数限制
+            nodes: The list of nodes to execute
+            context: The execution context
+            tools: Available tool function collection
+            max_concurrency: Maximum concurrency limit
 
         Returns:
-            执行结果列表，顺序与输入节点相同
+            List of execution results, in the same order as input nodes
         """
         pass
 
     @abstractmethod
     def validate_node(self, node: Any, context: ExecutionContext) -> bool:
         """
-        验证节点是否可以执行
+        Validate if a node can be executed
 
         Args:
-            node: 要验证的节点
-            context: 执行上下文
+            node: The node to validate
+            context: The execution context
 
         Returns:
-            True 表示可以执行，False 表示不能执行
+            True if can execute, False if cannot execute
         """
         pass
 
     @abstractmethod
     def get_dependencies(self, node: Any) -> List[str]:
         """
-        获取节点的依赖节点列表
+        Get the list of dependent nodes for a node
 
         Args:
-            node: 节点对象
+            node: The node object
 
         Returns:
-            依赖节点ID列表
+            List of dependent node IDs
         """
         pass
 
     @abstractmethod
     def get_reads(self, node: Any) -> List[str]:
         """
-        获取节点的读取路径列表
+        Get the read path list for a node
 
         Args:
-            node: 节点对象
+            node: The node object
 
         Returns:
-            读取路径列表
+            List of read paths
         """
         pass
 
     @abstractmethod
     def get_writes(self, node: Any) -> List[str]:
         """
-        获取节点的写入路径列表
+        Get the write path list for a node
 
         Args:
-            node: 节点对象
+            node: The node object
 
         Returns:
-            写入路径列表
+            List of write paths
         """
         pass
 
     def register_tool(self, name: str, tool: AsyncCallable) -> None:
         """
-        注册工具函数
+        Register a tool function
 
         Args:
-            name: 工具名称
-            tool: 工具函数
+            name: Tool name
+            tool: Tool function
         """
-        # 默认实现：子类可以重写以提供自定义工具注册逻辑
+        # Default implementation: subclasses can override to provide custom tool registration logic
         pass
 
     def unregister_tool(self, name: str) -> None:
         """
-        注销工具函数
+        Unregister a tool function
 
         Args:
-            name: 工具名称
+            name: Tool name
         """
-        # 默认实现：子类可以重写以提供自定义工具注销逻辑
+        # Default implementation: subclasses can override to provide custom tool unregistration logic
         pass
 
     def get_execution_stats(self) -> Dict[str, Any]:
         """
-        获取执行统计信息
+        Get execution statistics
 
         Returns:
-            统计信息字典
+            Statistics dictionary
         """
         return {
             "total_executions": 0,
@@ -161,19 +161,19 @@ class ExecutionBackend(ABC):
 
     async def health_check(self) -> bool:
         """
-        健康检查
+        Health check
 
         Returns:
-            True 表示后端正常，False 表示异常
+            True if backend is healthy, False if there is an issue
         """
         return True
 
 
 class BaseExecutionBackend(ExecutionBackend):
     """
-    基础执行后端实现
+    Base Execution Backend Implementation
 
-    提供通用的执行逻辑和状态管理功能
+    Provides common execution logic and state management functionality
     """
 
     def __init__(self):
@@ -187,16 +187,16 @@ class BaseExecutionBackend(ExecutionBackend):
         self._running_tasks: Dict[str, asyncio.Task] = {}
 
     def register_tool(self, name: str, tool: AsyncCallable) -> None:
-        """注册工具函数"""
+        """Register tool function"""
         self._tools[name] = tool
 
     def unregister_tool(self, name: str) -> None:
-        """注销工具函数"""
+        """Unregister tool function"""
         if name in self._tools:
             del self._tools[name]
 
     def get_tools(self) -> Dict[str, AsyncCallable]:
-        """获取所有注册的工具"""
+        """Get all registered tools"""
         return self._tools.copy()
 
     async def _execute_with_tracking(
@@ -205,11 +205,11 @@ class BaseExecutionBackend(ExecutionBackend):
         context: ExecutionContext,
         executor: Callable[[Any, ExecutionContext], Awaitable[ExecutionResult]],
     ) -> ExecutionResult:
-        """带追踪的执行包装器"""
+        """Execution wrapper with tracking"""
         start_time = time.time()
         node_id = getattr(node, "id", "unknown")
 
-        # 创建执行记录
+        # Create execution record
         execution = NodeExecution(
             node_id=node_id,
             step_id=context.step_counter,
@@ -221,10 +221,10 @@ class BaseExecutionBackend(ExecutionBackend):
         context.execution_history.append(execution)
 
         try:
-            # 执行节点
+            # Execute node
             result = await executor(node, context)
 
-            # 更新执行记录
+            # Update execution record
             end_time = time.time()
             execution.status = (
                 ExecutionStatus.COMPLETED if result.success else ExecutionStatus.FAILED
@@ -232,7 +232,7 @@ class BaseExecutionBackend(ExecutionBackend):
             execution.end_time = end_time
             execution.result = result
 
-            # 更新统计
+            # Update statistics
             self._stats["total_executions"] += 1
             if result.success:
                 self._stats["successful_executions"] += 1
@@ -243,7 +243,7 @@ class BaseExecutionBackend(ExecutionBackend):
             return result
 
         except Exception as e:
-            # 处理异常
+            # Handle exception
             end_time = time.time()
             execution.status = ExecutionStatus.FAILED
             execution.end_time = end_time
@@ -256,7 +256,7 @@ class BaseExecutionBackend(ExecutionBackend):
             return ExecutionResult(success=False, error=e)
 
     def get_execution_stats(self) -> Dict[str, Any]:
-        """获取执行统计信息"""
+        """Get execution statistics"""
         times = self._stats["execution_times"]
         avg_time = sum(times) / len(times) if times else 0.0
 
@@ -270,7 +270,7 @@ class BaseExecutionBackend(ExecutionBackend):
         }
 
     def reset_stats(self) -> None:
-        """重置统计信息"""
+        """Reset statistics"""
         self._stats = {
             "total_executions": 0,
             "successful_executions": 0,
@@ -281,9 +281,9 @@ class BaseExecutionBackend(ExecutionBackend):
 
 class DummyExecutionBackend(BaseExecutionBackend):
     """
-    虚拟执行后端
+    Dummy Execution Backend
 
-    用于测试和开发环境，不执行实际的业务逻辑
+    Used for testing and development environments, does not execute actual business logic
     """
 
     async def execute_node(
@@ -292,17 +292,17 @@ class DummyExecutionBackend(BaseExecutionBackend):
         context: ExecutionContext,
         tools: Optional[Dict[str, AsyncCallable]] = None,
     ) -> ExecutionResult:
-        """执行单个节点（虚拟实现）"""
+        """Execute a single node (dummy implementation)"""
         return await self._execute_with_tracking(node, context, self._dummy_execute)
 
     async def _dummy_execute(
         self, node: Any, context: ExecutionContext
     ) -> ExecutionResult:
-        """虚拟执行逻辑"""
-        # 模拟一些执行时间
+        """Dummy execution logic"""
+        # Simulate some execution time
         await asyncio.sleep(0.001)
 
-        # 返回虚拟成功结果
+        # Return dummy success result
         return ExecutionResult(
             success=True,
             data={"dummy": True, "node_id": getattr(node, "id", "unknown")},
@@ -316,7 +316,7 @@ class DummyExecutionBackend(BaseExecutionBackend):
         tools: Optional[Dict[str, AsyncCallable]] = None,
         max_concurrency: Optional[int] = None,
     ) -> List[ExecutionResult]:
-        """批量执行节点（虚拟实现）"""
+        """Execute nodes in batch (dummy implementation)"""
         if max_concurrency is None:
             max_concurrency = len(nodes)
 
@@ -330,17 +330,17 @@ class DummyExecutionBackend(BaseExecutionBackend):
         return await asyncio.gather(*tasks)
 
     def validate_node(self, node: Any, context: ExecutionContext) -> bool:
-        """验证节点（虚拟实现）"""
+        """Validate node (dummy implementation)"""
         return True
 
     def get_dependencies(self, node: Any) -> List[str]:
-        """获取依赖（虚拟实现）"""
+        """Get dependencies (dummy implementation)"""
         return getattr(node, "dependencies", [])
 
     def get_reads(self, node: Any) -> List[str]:
-        """获取读取路径（虚拟实现）"""
+        """Get read paths (dummy implementation)"""
         return getattr(node, "reads", [])
 
     def get_writes(self, node: Any) -> List[str]:
-        """获取写入路径（虚拟实现）"""
+        """Get write paths (dummy implementation)"""
         return getattr(node, "writes", [])

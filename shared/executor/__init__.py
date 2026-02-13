@@ -1,10 +1,10 @@
 """
-共享执行引擎抽象层
+Shared Execution Engine Abstractions
 
-提供多后端架构的抽象接口，支持不同执行引擎的实现。
+Provides abstract interfaces for multi-backend architecture, supporting different execution engine implementations.
 """
 
-# 核心抽象接口
+# Core Abstract Interfaces
 from .backend import ExecutionBackend
 from .adapter import ToolAdapter
 from .scheduler import Scheduler, SchedulingStrategy, SchedulingDecision
@@ -12,7 +12,7 @@ from .evaluator import Evaluator, EvaluationResult, EvaluationStrategy
 from .context import ExecutionContext, StateManager, ContextManager, PathResolver
 from .types import ExecutionResult, ToolResult, NodeExecution, ExecutionStatus
 
-# AutoGen兼容实现
+# AutoGen Compatible Implementations
 from .autogen_scheduler import (
     ExecutionState,
     AutoGenDeterministicScheduler,
@@ -28,7 +28,7 @@ from .autogen_scheduler import (
 from .autogen_evaluator import AutoGenConditionEvaluator, evaluate_condition
 
 __all__ = [
-    # 核心接口
+    # Core interfaces
     "ExecutionBackend",
     "ToolAdapter",
     "Scheduler",
@@ -37,7 +37,7 @@ __all__ = [
     "StateManager",
     "ContextManager",
     "PathResolver",
-    # 类型定义
+    # Type definitions
     "ExecutionResult",
     "ToolResult",
     "NodeExecution",
@@ -46,12 +46,12 @@ __all__ = [
     "SchedulingDecision",
     "EvaluationResult",
     "EvaluationStrategy",
-    # AutoGen兼容实现
+    # AutoGen Compatible Implementations
     "ExecutionState",
     "AutoGenDeterministicScheduler",
     "AutoGenConditionEvaluator",
     "DomainAllocator",
-    # 便捷函数
+    # Convenience functions
     "select_next_node",
     "get_node_path_set",
     "check_path_intersection",

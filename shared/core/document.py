@@ -1,7 +1,7 @@
 """
-LinJ 文档模型
+LinJ Document Model
 
-实现规范 4 节定义的 LinJ 文档结构
+Implements the LinJ document structure defined in Specification Section 4
 """
 
 import logging
@@ -21,7 +21,7 @@ from ..exceptions.errors import (
 
 class Policies(BaseModel):
     """
-    全局策略 (10.1 节)
+    Global policies (Section 10.1)
     """
 
     max_steps: Optional[int] = None
@@ -34,29 +34,29 @@ class Policies(BaseModel):
 
 class Loop(BaseModel):
     """
-    显式循环 (12 节)
+    Explicit loop (Section 12)
     """
 
     id: str
     entry: str
     members: List[str]
-    mode: str = "finite"  # finite 或 infinite
+    mode: str = "finite"  # finite or infinite
     stop_condition: Optional[str] = None
     max_rounds: Optional[int] = None
 
 
 class Placement(BaseModel):
     """
-    放置声明 (15.2 节)
+    Placement declaration (Section 15.2)
     """
 
-    target: str  # 节点 id 或 resource_name
-    domain: str  # 执行域标签
+    target: str  # node id or resource_name
+    domain: str  # execution domain label
 
 
 class Requirements(BaseModel):
     """
-    运行要求 (15.1 节)
+    Runtime requirements (Section 15.1)
     """
 
     allow_parallel: bool = False
@@ -66,12 +66,12 @@ class Requirements(BaseModel):
 
 class LinJDocument(BaseModel):
     """
-    LinJ 文档 (4.1 节)
+    LinJ Document (Section 4.1)
 
-    必须包含：
-    - linj_version: 版本号
-    - nodes: 节点数组
-    - edges: 依赖边数组
+    Required fields:
+    - linj_version: version number
+    - nodes: array of nodes
+    - edges: array of dependency edges
     """
 
     linj_version: str
@@ -85,7 +85,7 @@ class LinJDocument(BaseModel):
     @field_validator("nodes", mode="before")
     @classmethod
     def parse_nodes(cls, v):
-        """解析节点列表"""
+        """Parse node list"""
         if v is None:
             return []
         return [parse_node(node) if isinstance(node, dict) else node for node in v]
@@ -93,7 +93,7 @@ class LinJDocument(BaseModel):
     @field_validator("linj_version")
     @classmethod
     def validate_version(cls, v):
-        """验证版本号格式"""
+        """Validate version format"""
         parts = v.split(".")
         if len(parts) != 2:
             raise ValidationError(f"Invalid version format: {v}. Expected: major.minor")
@@ -105,5 +105,5 @@ class LinJDocument(BaseModel):
         return v
 
     def get_major_version(self) -> int:
-        """获取主版本号"""
+        """Get major version number"""
         return int(self.linj_version.split(".")[0])

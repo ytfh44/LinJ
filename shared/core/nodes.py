@@ -1,7 +1,7 @@
 """
-LinJ 节点定义
+LinJ Node Definitions
 
-实现规范 6 节、13 节定义的节点类型和语义
+Implements node types and semantics as defined in Sections 6 and 13 of the specification
 """
 
 from abc import ABC, abstractmethod
@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 class Contract(BaseModel):
     """
-    合同（输入/输出约束）
+    Contract (input/output constraints)
 
-    7.1 节定义的最小合同语言
+    Minimal contract language as defined in Section 7.1
     """
 
     type: str  # object/array/string/number/boolean/null
@@ -25,17 +25,17 @@ class Contract(BaseModel):
 
 
 class NodePolicy(BaseModel):
-    """节点策略 (10.2 节)"""
+    """Node policy (Section 10.2)"""
 
     allow_reenter: bool = False
 
 
 class ValueRef(BaseModel):
     """
-    路径引用或常量 (6.2 节)
+    Path reference or constant (Section 6.2)
 
-    - {"$path": "$.x.y"} 表示路径引用
-    - {"$const": <value>} 表示常量
+    - {"$path": "$.x.y"} represents a path reference
+    - {"$const": <value>} represents a constant
     """
 
     model_config = {"populate_by_name": True}
@@ -44,7 +44,7 @@ class ValueRef(BaseModel):
     const: Optional[Any] = Field(default=None, alias="$const")
 
     def resolve(self, state: Dict[str, Any]) -> Any:
-        """从状态解析值"""
+        """Resolve value from state"""
         from .path import PathResolver
 
         if self.path is not None:
@@ -54,9 +54,9 @@ class ValueRef(BaseModel):
     @classmethod
     def from_value(cls, value: Any) -> "ValueRef":
         """
-        从值创建 ValueRef
+        Create ValueRef from value
 
-        兼容模式：字符串以 $. 开头视为路径
+        Compatibility mode: strings starting with $. are treated as paths
         """
         if isinstance(value, str) and value.startswith("$."):
             return cls(path=value)
@@ -65,11 +65,11 @@ class ValueRef(BaseModel):
 
 class Node(BaseModel, ABC):
     """
-    节点基类 (6.1 节)
+    Base node class (Section 6.1)
 
-    所有节点必须包含：
-    - id: 全局唯一标识
-    - type: hint/tool/join/gate 之一
+    All nodes must contain:
+    - id: globally unique identifier
+    - type: one of hint/tool/join/gate
     """
 
     id: str
@@ -86,9 +86,9 @@ class Node(BaseModel, ABC):
 
 class HintNode(Node):
     """
-    hint 节点 (13.1 节)
+    hint node (Section 13.1)
 
-    提示生成节点，用于模板渲染
+    Hint generation node for template rendering
     """
 
     type: str = "hint"
@@ -98,9 +98,9 @@ class HintNode(Node):
 
     def render(self, state: Dict[str, Any]) -> str:
         """
-        渲染模板
+        Render template
 
-        替换 {{name}} 为对应变量值
+        Replace {{name}} with corresponding variable values
         """
         import re
 
@@ -117,7 +117,7 @@ class HintNode(Node):
                 if value is None:
                     raise ValueError(f"Variable {name} not found in state")
 
-                # 替换 {{name}}
+                # Replace {{name}}
                 placeholder = f"{{{{{name}}}}}"
                 str_value = "" if value is None else str(value)
                 result = result.replace(placeholder, str_value)
@@ -126,14 +126,14 @@ class HintNode(Node):
 
 
 class ToolCall(BaseModel):
-    """工具调用定义"""
+    """Tool call definition"""
 
     name: str
     args: Optional[Dict[str, Union[ValueRef, Any]]] = None
 
 
 class Effect(str, Enum):
-    """工具效果类型"""
+    """Tool effect type"""
 
     NONE = "none"
     READ = "read"
@@ -142,9 +142,9 @@ class Effect(str, Enum):
 
 class ToolNode(Node):
     """
-    tool 节点 (13.2 节)
+    tool node (Section 13.2)
 
-    工具调用节点
+    Tool call node
     """
 
     type: str = "tool"
@@ -154,7 +154,7 @@ class ToolNode(Node):
     repeat_safe: bool = False
 
     def get_args(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """解析工具参数"""
+        """Parse tool arguments"""
         if not self.call.args:
             return {}
 
@@ -171,12 +171,12 @@ class ToolNode(Node):
         return result
 
     def can_retry(self) -> bool:
-        """检查是否可以自动重试"""
+        """Check if automatic retry is allowed"""
         return self.effect in (Effect.NONE, Effect.READ) or self.repeat_safe
 
 
 class GlossaryItem(BaseModel):
-    """术语表项 (13.3 节)"""
+    """Glossary item (Section 13.3)"""
 
     prefer: Optional[str] = None
     forbid: Optional[List[str]] = None
@@ -184,9 +184,9 @@ class GlossaryItem(BaseModel):
 
 class JoinNode(Node):
     """
-    join 节点 (13.3 节)
+    join node (Section 13.3)
 
-    文本接合节点
+    Text joining node
     """
 
     type: str = "join"
@@ -198,9 +198,9 @@ class JoinNode(Node):
 
     def validate_forbidden(self, text: str) -> Optional[str]:
         """
-        验证是否包含禁止项
+        Validate if forbidden items are present
 
-        返回 None 表示验证通过；否则返回第一个发现的禁止项
+        Returns None if validation passes; otherwise returns the first forbidden item found
         """
         if not self.glossary:
             return None
@@ -216,9 +216,9 @@ class JoinNode(Node):
 
 class GateNode(Node):
     """
-    gate 节点 (13.4 节)
+    gate node (Section 13.4)
 
-    条件门控节点
+    Conditional gating node
     """
 
     model_config = {"populate_by_name": True}
@@ -230,27 +230,27 @@ class GateNode(Node):
 
     def evaluate(self, state: Dict[str, Any]) -> bool:
         """
-        求值条件 (13.4 节, 14.x 节)
+        Evaluate condition (Section 13.4, 14.x)
 
-        使用条件表达式求值器计算条件结果
-        支持比较运算符、逻辑运算符和内置函数
+        Use condition expression evaluator to compute condition result
+        Supports comparison operators, logical operators, and built-in functions
 
         Args:
-            state: 主状态对象
+            state: Main state object
 
         Returns:
-            条件求值结果（True 或 False）
+            Condition evaluation result (True or False)
 
         Raises:
-            SyntaxError: 条件表达式语法错误
-            TypeError: 类型不匹配
+            SyntaxError: Condition expression syntax error
+            TypeError: Type mismatch
         """
         from .condition import evaluate_condition
 
         return evaluate_condition(self.condition, state)
 
     def get_next_nodes(self, state: Dict[str, Any]) -> List[str]:
-        """获取下一步节点"""
+        """Get next nodes"""
         if self.evaluate(state):
             return self.then
         return self.else_
@@ -261,7 +261,7 @@ NodeType = Union[HintNode, ToolNode, JoinNode, GateNode]
 
 
 def parse_node(data: Dict[str, Any]) -> Node:
-    """从字典解析节点"""
+    """Parse node from dictionary"""
     node_type = data.get("type")
 
     if node_type == "hint":

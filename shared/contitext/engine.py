@@ -1,9 +1,9 @@
 """
-ContiText 引擎
+ContiText Engine
 
-实现 LinJ 规范第 19 节定义的基本操作：派生、挂起、恢复、合流、取消
-集成 CommitManager 实现决定性变更提交
-框架无关的续体执行引擎实现
+Implements the basic operations defined in Section 19 of the LinJ specification: derive, suspend, resume, join, cancel
+Integrates CommitManager to implement deterministic change submission
+Framework-agnostic continuation execution engine implementation
 """
 
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class JoinResult:
-    """合流结果 (19.4 节)"""
+    """Join result (Section 19.4)"""
 
     def __init__(
         self,
@@ -34,57 +34,57 @@ class JoinResult:
 
 @runtime_checkable
 class ChangeSet(Protocol):
-    """变更集协议，用于框架无关的变更集操作"""
+    """ChangeSet protocol for framework-agnostic changeset operations"""
 
     def is_empty(self) -> bool:
-        """检查变更集是否为空"""
+        """Check if changeset is empty"""
         ...
 
     def intersects_with(self, other: Any) -> bool:
-        """检查是否与另一个变更集相交"""
+        """Check if changeset intersects with another changeset"""
         ...
 
     def apply_to_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """将变更集应用到状态"""
+        """Apply changeset to state"""
         ...
 
 
 class ContiTextEngine:
     """
-    ContiText 执行引擎
+    ContiText Execution Engine
 
-    管理续体的生命周期：派生、挂起、恢复、合流、取消
-    集成决定性变更提交管理
-    框架无关的引擎实现
+    Manages continuation lifecycle: derive, suspend, resume, join, cancel
+    Integrates deterministic change submission management
+    Framework-agnostic engine implementation
     """
 
     def __init__(self, state_manager: Optional[StateManager] = None):
         """
-        初始化 ContiText 引擎
+        Initialize ContiText engine
 
         Args:
-            state_manager: 状态管理器，用于变更集提交
+            state_manager: State manager for changeset submission
         """
         self._continuations: Dict[str, Continuation] = {}
         self._signal_queue = SignalQueue()
         self._children: Dict[str, List[str]] = {}  # parent -> children
 
-        # 状态管理和变更提交
+        # State management and change submission
         if state_manager is None:
-            # 创建一个简单的默认状态管理器
+            # Create a simple default state manager
             self._state_manager = self._create_default_state_manager()
         else:
             self._state_manager = state_manager
 
         self._commit_manager = CommitManager(self._state_manager)
 
-        # 待提交的变更集（按 step_id 排序）
+        # Pending changesets (ordered by step_id)
         self._pending_changes: Dict[int, Any] = {}
 
         logger.info("ContiText engine initialized")
 
     def _create_default_state_manager(self) -> StateManager:
-        """创建默认的状态管理器实现"""
+        """Create default state manager implementation"""
 
         class DefaultStateManager:
             def __init__(self):
@@ -98,11 +98,11 @@ class ContiTextEngine:
                 return self._revision
 
             def apply(self, changeset: Any, step_id: Optional[int] = None) -> None:
-                # 简单的变更集应用逻辑
+                # Simple changeset application logic
                 if hasattr(changeset, "apply_to_state"):
                     self._state = changeset.apply_to_state(self._state)
                 else:
-                    # 简单的状态更新逻辑
+                    # Simple state update logic
                     if isinstance(changeset, dict):
                         self._state.update(changeset)
                 self._revision += 1
@@ -111,13 +111,13 @@ class ContiTextEngine:
 
     def derive(self, parent: Optional[Continuation] = None) -> Continuation:
         """
-        派生子续体 (19.1 节)
+        Derive child continuation (Section 19.1)
 
         Args:
-            parent: 父续体，None 表示创建根续体
+            parent: Parent continuation, None for root continuation
 
         Returns:
-            新创建的续体
+            Newly created continuation
         """
         cont = Continuation(
             parent_handle=parent.handle if parent else None,
@@ -127,7 +127,7 @@ class ContiTextEngine:
 
         self._continuations[cont.handle] = cont
 
-        # 记录父子关系
+        # Record parent-child relationship
         if parent:
             if parent.handle not in self._children:
                 self._children[parent.handle] = []
@@ -145,12 +145,12 @@ class ContiTextEngine:
         wait_condition: Optional[WaitCondition] = None,
     ) -> None:
         """
-        挂起续体 (19.2 节)
+        Suspend continuation (Section 19.2)
 
         Args:
-            cont: 要挂起的续体
-            changeset: 挂起时产生的变更集
-            wait_condition: 等待条件（如果有）
+            cont: Continuation to suspend
+            changeset: Changeset produced when suspending
+            wait_condition: Wait condition (if any)
         """
         if cont.handle not in self._continuations:
             raise ValueError(f"Continuation {cont.handle} not found")
@@ -158,7 +158,7 @@ class ContiTextEngine:
         cont.status = Status.SUSPENDED
         cont.pending_changeset = changeset
 
-        # 注册等待者
+        # Register waiter
         if wait_condition:
             self._signal_queue.register_waiter(cont.handle, wait_condition)
 
@@ -166,14 +166,14 @@ class ContiTextEngine:
 
     def resume(self, handle: str, input_data: Optional[Dict] = None) -> Continuation:
         """
-        恢复续体 (19.3 节)
+        Resume continuation (Section 19.3)
 
         Args:
-            handle: 续体句柄
-            input_data: 注入的输入数据
+            handle: Continuation handle
+            input_data: Injected input data
 
         Returns:
-            恢复后的续体
+            Resumed continuation
         """
         if handle not in self._continuations:
             raise ValueError(f"Continuation {handle} expired or invalid")
@@ -185,11 +185,11 @@ class ContiTextEngine:
 
         cont.status = Status.RUNNING
 
-        # 注入输入数据
+        # Inject input data
         if input_data:
             cont.local_state.update(input_data)
 
-        # 取消等待注册
+        # Unregister waiter
         self._signal_queue.unregister_waiter(handle)
 
         logger.debug(f"Resumed continuation: {handle}")
@@ -197,15 +197,15 @@ class ContiTextEngine:
 
     async def join(self, handles: List[str]) -> List[JoinResult]:
         """
-        合流等待 (19.4 节)
+        Join wait (Section 19.4)
 
-        等待所有指定续体到达终态
+        Wait for all specified continuations to reach terminal state
 
         Args:
-            handles: 续体句柄列表
+            handles: List of continuation handles
 
         Returns:
-            每个续体的合流结果
+            Join result for each continuation
         """
         import asyncio
 
@@ -217,9 +217,9 @@ class ContiTextEngine:
 
             cont = self._continuations[handle]
 
-            # 等待续体到达终态
+            # Wait for continuation to reach terminal state
             while not cont.is_terminal():
-                await asyncio.sleep(0.01)  # 简单轮询
+                await asyncio.sleep(0.01)  # Simple polling
 
             results.append(
                 JoinResult(
@@ -235,36 +235,36 @@ class ContiTextEngine:
 
     def cancel(self, handle: str) -> None:
         """
-        取消续体 (19.5 节)
+        Cancel continuation (Section 19.5)
 
-        - 幂等：重复取消不产生新副作用
-        - 传播：主续体被取消时，子续体也应被取消
-        - 取消后不得提交变更
+        - Idempotent: repeated cancellation produces no new side effects
+        - Propagation: child continuations should also be cancelled when parent is cancelled
+        - No changesets should be submitted after cancellation
 
         Args:
-            handle: 要取消的续体句柄
+            handle: Continuation handle to cancel
         """
         if handle not in self._continuations:
-            return  # 幂等：不存在的句柄静默返回
+            return  # Idempotent: silent return for non-existent handle
 
         cont = self._continuations[handle]
 
-        # 如果已经是终态，不再处理
+        # If already terminal, skip processing
         if cont.is_terminal():
             return
 
-        # 标记为取消
+        # Mark as cancelled
         cont.status = Status.CANCELLED
 
         logger.debug(f"Cancelled continuation: {handle}")
 
-        # 递归取消子续体
+        # Recursively cancel child continuations
         if handle in self._children:
             for child_handle in self._children[handle]:
                 self.cancel(child_handle)
 
     def complete(self, handle: str, result: Any) -> None:
-        """标记续体成功完成"""
+        """Mark continuation as successfully completed"""
         if handle not in self._continuations:
             raise ValueError(f"Continuation {handle} not found")
 
@@ -279,7 +279,7 @@ class ContiTextEngine:
         logger.debug(f"Completed continuation: {handle}")
 
     def fail(self, handle: str, error: str) -> None:
-        """标记续体失败"""
+        """Mark continuation as failed"""
         if handle not in self._continuations:
             raise ValueError(f"Continuation {handle} not found")
 
@@ -294,12 +294,12 @@ class ContiTextEngine:
         logger.debug(f"Failed continuation: {handle}, error: {error}")
 
     def send_signal(self, signal: Signal) -> None:
-        """发送信号"""
+        """Send signal"""
         self._signal_queue.send(signal)
         logger.debug(f"Sent signal: {signal.name}")
 
     def check_signal(self, handle: str, state: Dict) -> Optional[Signal]:
-        """检查等待者是否等到了信号"""
+        """Check if waiter received signal"""
         if handle not in self._continuations:
             return None
 
@@ -307,9 +307,9 @@ class ContiTextEngine:
         if cont.status != Status.SUSPENDED:
             return None
 
-        # 查找匹配的信号
+        # Find matching signal
         for signal in self._signal_queue._signals:
-            # 检查是否有等待条件
+            # Check if there's a wait condition
             wait_condition = self._signal_queue._waiters.get(handle)
             if wait_condition:
                 if wait_condition.matches(signal, state):
@@ -318,7 +318,7 @@ class ContiTextEngine:
                     )
                     return signal
             else:
-                # 没有等待条件，返回第一个信号
+                # No wait condition, return first signal
                 logger.debug(
                     f"Signal received for continuation {handle}: {signal.name}"
                 )
@@ -327,7 +327,7 @@ class ContiTextEngine:
         return None
 
     def get_continuation(self, handle: str) -> Optional[Continuation]:
-        """获取续体"""
+        """Get continuation"""
         return self._continuations.get(handle)
 
     def submit_changeset(
@@ -338,18 +338,18 @@ class ContiTextEngine:
         base_revision: Optional[int] = None,
     ) -> CommitResult:
         """
-        提交变更集 (20.2 节)
+        Submit changeset (Section 20.2)
 
-        集成 CommitManager 实现决定性提交
+        Integrate CommitManager to implement deterministic submission
 
         Args:
-            step_id: 步骤 ID
-            changeset: 变更集
-            handle: 续体句柄
-            base_revision: 基准修订版本，若为 None 则使用当前版本
+            step_id: Step ID
+            changeset: Changeset
+            handle: Continuation handle
+            base_revision: Base revision, uses current revision if None
 
         Returns:
-            提交结果
+            Commit result
         """
         if base_revision is None:
             base_revision = self._state_manager.get_revision()
@@ -372,10 +372,10 @@ class ContiTextEngine:
 
     def process_pending_changes(self) -> List[CommitResult]:
         """
-        处理待提交的变更集
+        Process pending changesets
 
         Returns:
-            本次处理产生的所有结果
+            All results produced by this processing
         """
         results = self._commit_manager.process_queue()
         logger.debug(f"Processed {len(results)} pending changesets")
@@ -385,21 +385,21 @@ class ContiTextEngine:
         self, cont: Continuation, pending_changes: Optional[List[Any]] = None
     ) -> ContinuationView:
         """
-        为续体创建视图 (18.2 节)
+        Create view for continuation (Section 18.2)
 
         Args:
-            cont: 续体
-            pending_changes: 待提交的变更集列表
+            cont: Continuation
+            pending_changes: List of pending changesets
 
         Returns:
-            续体视图
+            Continuation view
         """
         return cont.create_view(self._state_manager, pending_changes)
 
     def get_state_manager(self) -> StateManager:
-        """获取状态管理器"""
+        """Get state manager"""
         return self._state_manager
 
     def get_commit_manager(self) -> CommitManager:
-        """获取提交管理器"""
+        """Get commit manager"""
         return self._commit_manager

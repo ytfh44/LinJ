@@ -1,17 +1,17 @@
 """
-一致性测试
+Consistency tests
 
-实现 LinJ 规范第 28 节建议的一致性测试用例：
-验证串行执行与并行执行产生相同的最终主状态
+Implements consistency test cases recommended by LinJ Specification Section 28:
+Verify that serial and parallel execution produce the same final master state
 
-测试用例覆盖：
-- 多入边映射冲突
-- gate 重复触发去重
-- 隐式循环的有界性拒绝
-- 写入相交与不相交判定
-- effect=write 且 repeat_safe=false 的禁止自动重试
-- 信号等待恢复
-- 取消传播与取消后禁止提交
+Test case coverage:
+- Multi-input edge mapping conflicts
+- Gate deduplication on repeated triggers
+- Boundedness rejection for implicit loops
+- Write intersection and disjointness determination
+- Prohibit automatic retry when effect=write and repeat_safe=false
+- Signal wait recovery
+- Cancellation propagation and prohibit submission after cancellation
 """
 
 import pytest
@@ -42,77 +42,77 @@ from shared.core.tracing import DiagnosticTracer
 
 
 class TestPathOperations:
-    """测试路径读写操作 (5.1-5.4)"""
+    """Test path read/write operations (5.1-5.4)"""
 
     def test_get_nonexistent_path(self):
-        """5.2 节：读取不存在路径返回空值"""
+        """Section 5.2: Reading non-existent paths returns null"""
         state = {"a": {"b": "value"}}
         assert PathResolver.get(state, "$.missing") is None
         assert PathResolver.get(state, "$.a.missing") is None
         assert PathResolver.get(state, "$.a[10]") is None
 
     def test_set_creates_intermediate(self):
-        """5.3.1 节：写入时自动创建中间对象"""
+        """Section 5.3.1: Intermediate objects are automatically created when writing"""
         state: Dict[str, Any] = {}
         PathResolver.set(state, "$.a.b.c", "value")
         assert state == {"a": {"b": {"c": "value"}}}
 
     def test_set_array_creates_array(self):
-        """5.3.2 节：写入数组路径时自动创建数组"""
+        """Section 5.3.2: Arrays are automatically created when writing array paths"""
         state: Dict[str, Any] = {}
         PathResolver.set(state, "$.arr[2]", "value")
         assert state == {"arr": [None, None, "value"]}
 
     def test_delete_sets_null(self):
-        """5.4 节：删除操作将值设为 null"""
+        """Section 5.4: Delete operation sets value to null"""
         state = {"a": {"b": "value", "c": 123}}
         PathResolver.delete(state, "$.a.b")
         assert state == {"a": {"b": None, "c": 123}}
 
 
 class TestPathIntersection:
-    """测试路径相交判定 (11.4)"""
+    """Test path intersection determination (11.4)"""
 
     def test_prefix_intersection(self):
-        """前缀路径相交"""
+        """Prefix paths intersect"""
         assert PathResolver.intersect("$.a", "$.a.b") is True
         assert PathResolver.intersect("$.a.b", "$.a") is True
 
     def test_identical_paths(self):
-        """相同路径相交"""
+        """Identical paths intersect"""
         assert PathResolver.intersect("$.a.b", "$.a.b") is True
 
     def test_array_index_no_intersection(self):
-        """不同数组下标不相交"""
+        """Different array indices do not intersect"""
         assert PathResolver.intersect("$.a[0]", "$.a[1]") is False
 
     def test_array_prefix_intersection(self):
-        """数组与数组元素相交"""
+        """Array and array element intersect"""
         assert PathResolver.intersect("$.a", "$.a[1]") is True
         assert PathResolver.intersect("$.a[0]", "$.a[0].b") is True
 
 
 class TestChangeSetIntersection:
-    """测试变更集相交判定"""
+    """Test changeset intersection determination"""
 
     def test_disjoint_changesets(self):
-        """不相交的变更集"""
+        """Disjoint changesets"""
         cs1 = ChangeSet(writes=[WriteOp(path="$.a", value=1)])
         cs2 = ChangeSet(writes=[WriteOp(path="$.b", value=2)])
         assert cs1.intersects_with(cs2) is False
 
     def test_intersecting_changesets(self):
-        """相交的变更集"""
+        """Intersecting changesets"""
         cs1 = ChangeSet(writes=[WriteOp(path="$.a", value=1)])
         cs2 = ChangeSet(writes=[WriteOp(path="$.a.b", value=2)])
         assert cs1.intersects_with(cs2) is True
 
 
 class TestConditionEvaluation:
-    """测试条件表达式求值 (14.x)"""
+    """Test condition expression evaluation (14.x)"""
 
     def test_comparison_operators(self):
-        """比较运算符"""
+        """Comparison operators"""
         state = {"count": 5, "name": "test"}
         assert evaluate_condition("count == 5", state) is True
         assert evaluate_condition("count != 3", state) is True
@@ -122,14 +122,14 @@ class TestConditionEvaluation:
         assert evaluate_condition("count <= 5", state) is True
 
     def test_logical_operators(self):
-        """逻辑运算符"""
+        """Logical operators"""
         state = {"a": True, "b": False}
         assert evaluate_condition("a AND b", state) is False
         assert evaluate_condition("a OR b", state) is True
         assert evaluate_condition("NOT b", state) is True
 
     def test_functions(self):
-        """内置函数"""
+        """Built-in functions"""
         state = {"items": [1, 2, 3], "exists_val": "hello"}
         assert evaluate_condition('exists("$.items")', state) is True
         assert evaluate_condition('exists("$.missing")', state) is False
@@ -137,20 +137,20 @@ class TestConditionEvaluation:
         assert evaluate_condition('value("$.exists_val") == "hello"', state) is True
 
     def test_null_handling(self):
-        """null 值处理"""
+        """Null value handling"""
         state = {"null_val": None, "count": 5}
         assert evaluate_condition("null_val == null", state) is True
         assert evaluate_condition("null_val != null", state) is False
         assert (
             evaluate_condition("null_val > 3", state) is False
-        )  # null 比较结果为 false
+        )  # null comparison returns false
 
 
 class TestNodeExecution:
-    """测试节点执行"""
+    """Test node execution"""
 
     def test_hint_node(self):
-        """hint 节点模板渲染"""
+        """Hint node template rendering"""
         node = HintNode(
             id="hint1",
             template="Hello, {{name}}! You have {{count}} items.",
@@ -162,7 +162,7 @@ class TestNodeExecution:
         assert result == "Hello, Alice! You have 42 items."
 
     def test_gate_node_condition(self):
-        """gate 节点条件求值"""
+        """Gate node condition evaluation"""
         node = GateNode(
             id="gate1", condition="count > 10", then=["node_a"], else_=["node_b"]
         )
@@ -172,7 +172,7 @@ class TestNodeExecution:
         assert node.get_next_nodes({"count": 5}) == ["node_b"]
 
     def test_join_node_forbid(self):
-        """join 节点 forbid 验证"""
+        """Join node forbid validation"""
         from shared.core.nodes import GlossaryItem
 
         node = JoinNode(
@@ -186,10 +186,10 @@ class TestNodeExecution:
 
 
 class TestDependencyGraph:
-    """测试依赖图"""
+    """Test dependency graph"""
 
     def test_data_dependencies(self):
-        """数据依赖"""
+        """Data dependencies"""
         edges = [
             Edge(from_="a", to="b", kind=EdgeKind.DATA),
             Edge(from_="b", to="c", kind=EdgeKind.DATA),
@@ -200,7 +200,7 @@ class TestDependencyGraph:
         assert graph.get_data_dependencies("a") == []
 
     def test_control_dependencies(self):
-        """控制依赖"""
+        """Control dependencies"""
         edges = [
             Edge(from_="start", to="task1", kind=EdgeKind.CONTROL),
         ]
@@ -209,21 +209,21 @@ class TestDependencyGraph:
 
 
 class TestDeterministicScheduling:
-    """测试决定性调度 (11.3)"""
+    """Test deterministic scheduling (11.3)"""
 
     def test_rank_priority(self):
-        """rank 优先级排序"""
+        """Rank priority sorting"""
         nodes = [
             {"id": "a", "rank": 0},
             {"id": "b", "rank": 10},
             {"id": "c", "rank": 5},
         ]
-        # 按 rank 降序排序
+        # Sort by rank in descending order
         sorted_nodes = sorted(nodes, key=lambda n: (-n["rank"], n["id"]))
         assert [n["id"] for n in sorted_nodes] == ["b", "c", "a"]
 
     def test_node_order_tie_breaking(self):
-        """节点顺序打破平局"""
+        """Node order tie-breaking"""
         nodes = [
             {"id": "z", "rank": 5},
             {"id": "a", "rank": 5},
@@ -234,14 +234,14 @@ class TestDeterministicScheduling:
 
 
 class TestConcurrentSafety:
-    """测试并发安全性 (11.5)"""
+    """Test concurrent safety (11.5)"""
 
     def test_disjoint_reads_writes(self):
-        """不相交的读写可以并行"""
+        """Disjoint reads and writes can be parallel"""
         node_a = type("Node", (), {"id": "a", "reads": ["$.x"], "writes": ["$.y"]})()
         node_b = type("Node", (), {"id": "b", "reads": ["$.z"], "writes": ["$.w"]})()
 
-        # 检查是否可并行
+        # Check if can be parallel
         reads_a = getattr(node_a, "reads", []) or []
         writes_a = getattr(node_a, "writes", []) or []
         reads_b = getattr(node_b, "reads", []) or []
@@ -273,7 +273,7 @@ class TestConcurrentSafety:
         assert can_parallel is True
 
     def test_intersecting_writes_cannot_parallel(self):
-        """相交的写入不能并行"""
+        """Intersecting writes cannot be parallel"""
         node_a = type("Node", (), {"id": "a", "writes": ["$.shared"]})()
         node_b = type("Node", (), {"id": "b", "writes": ["$.shared.sub"]})()
 
@@ -291,25 +291,25 @@ class TestConcurrentSafety:
 
 
 class TestContinuationHandle:
-    """测试续体句柄 (17.x)"""
+    """Test continuation handle (17.x)"""
 
     def test_handle_creation(self):
-        """句柄创建"""
+        """Handle creation"""
         cont = Continuation()
         assert cont.handle is not None
         assert len(cont.handle) > 0
 
     def test_handle_expiration(self):
-        """句柄过期"""
+        """Handle expiration"""
         registry = ContinuationRegistry(default_ttl_ms=1)  # 1ms TTL
         cont = Continuation()
         registry.register(cont, ttl_ms=1)
 
-        # 句柄应该有效
+        # Handle should be valid
         assert registry.is_expired(cont.handle) is False
 
     def test_handle_not_found(self):
-        """句柄不存在"""
+        """Handle not found"""
         registry = ContinuationRegistry()
         with pytest.raises(HandleExpired) as exc_info:
             registry.get("nonexistent")
@@ -317,11 +317,11 @@ class TestContinuationHandle:
 
 
 class TestChangeSetCommit:
-    """测试变更集提交 (20.x)"""
+    """Test changeset commit (20.x)"""
 
     def test_empty_changeset_immediate_accept(self):
-        """空变更集立即接受"""
-        # 测试 CommitManager 的只读优化
+        """Empty changeset is immediately accepted"""
+        # Test CommitManager's read-only optimization
         from shared.contitext.commit_manager import CommitManager
 
         class MockStateManager:
@@ -343,7 +343,7 @@ class TestChangeSetCommit:
         state_manager = MockStateManager()
         commit_manager = CommitManager(state_manager)
 
-        # 提交空变更集
+        # Commit empty changeset
         empty_cs = ChangeSet()
         result = commit_manager.submit(
             step_id=1, base_revision=0, changeset=empty_cs, handle="test"
@@ -354,10 +354,10 @@ class TestChangeSetCommit:
 
 
 class TestTracer:
-    """测试追踪记录 (27.x)"""
+    """Test trace recording (27.x)"""
 
     def test_trace_entry(self):
-        """追踪条目创建"""
+        """Trace entry creation"""
         from shared.core.tracing import TraceEntry
 
         entry = TraceEntry(
@@ -374,7 +374,7 @@ class TestTracer:
         assert entry.status == "pending"
 
     def test_trace_to_dict(self):
-        """追踪条目序列化"""
+        """Trace entry serialization"""
         from shared.core.tracing import TraceEntry
 
         entry = TraceEntry(step_id=1, round=0, node_id="test_node")
@@ -389,10 +389,10 @@ class TestTracer:
 
 
 class TestDiagnostics:
-    """测试诊断记录 (26.x)"""
+    """Test diagnostic recording (26.x)"""
 
     def test_non_replayable_diagnostic(self):
-        """不可重放诊断记录"""
+        """Non-replayable diagnostic recording"""
         from shared.core.tracing import DiagnosticsRecorder
 
         recorder = DiagnosticsRecorder()
@@ -409,17 +409,17 @@ class TestDiagnostics:
         assert diag.reason == "Token expired"
         assert diag.at_step_id == 5
 
-        # 验证摘要
+        # Verify summary
         summary = recorder.get_summary()
         assert summary["total_diagnostics"] == 1
         assert summary["by_node"]["api_node"] == 1
 
 
 class TestMapConflictResolution:
-    """测试映射冲突解决 (8.3)"""
+    """Test map conflict resolution (8.3)"""
 
     def test_weight_based_resolution(self):
-        """权重优先的冲突解决"""
+        """Weight-based conflict resolution"""
         from shared.core.edges import DependencyGraph
 
         edges = [
@@ -441,20 +441,20 @@ class TestMapConflictResolution:
         graph = DependencyGraph(edges)
         resolved = graph.resolve_map_conflicts("target")
 
-        # 权重高的应该被保留
+        # Higher weight should be preserved
         assert len(resolved) >= 1
 
 
 class TestDocumentValidation:
-    """测试文档验证"""
+    """Test document validation"""
 
     def test_version_format(self):
-        """版本号格式验证"""
+        """Version number format validation"""
         doc = LinJDocument(linj_version="0.1", nodes=[], edges=[])
         assert doc.linj_version == "0.1"
 
     def test_node_parsing(self):
-        """节点解析"""
+        """Node parsing"""
         nodes = [
             {"id": "a", "type": "hint", "template": "Hello", "write_to": "$.out"},
             {"id": "b", "type": "tool", "call": {"name": "test"}},

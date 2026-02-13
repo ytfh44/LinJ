@@ -1,8 +1,8 @@
 """
-合同验证系统
+Contract Validation System
 
-实现规范 7.1 节定义的最小合同语言验证
-支持类型：object/array/string/number/boolean/null
+Implements minimum contract language validation as defined in Section 7.1
+Supported types: object, array, string, number, boolean, null
 """
 
 import copy
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class ContractValidationError:
-    """合同验证错误详情"""
+    """Contract validation error details"""
 
     def __init__(self, path: str, expected: str, actual: Any, message: str):
         self.path = path
@@ -40,12 +40,12 @@ class ContractValidationError:
 
 class ValidationResult:
     """
-    验证结果
+    Validation result
 
     Attributes:
-        valid: 验证是否通过
-        errors: 验证错误列表
-        warnings: 不可验证部分的警告信息
+        valid: Whether validation passed
+        errors: List of validation errors
+        warnings: Warnings for unvalidated parts
     """
 
     def __init__(
@@ -59,23 +59,23 @@ class ValidationResult:
         self.warnings = warnings or []
 
     def add_error(self, error: ContractValidationError) -> None:
-        """添加验证错误"""
+        """Add validation error"""
         self.errors.append(error)
         self.valid = False
 
     def add_warning(self, warning: str) -> None:
-        """添加警告"""
+        """Add warning"""
         self.warnings.append(warning)
 
     def merge(self, other: "ValidationResult") -> "ValidationResult":
-        """合并另一个验证结果到当前结果"""
+        """Merge another validation result into current result"""
         self.valid = self.valid and other.valid
         self.errors.extend(other.errors)
         self.warnings.extend(other.warnings)
         return self
 
     def raise_if_invalid(self, node_id: str) -> None:
-        """如果验证失败，抛出 ContractViolation"""
+        """Raise ContractViolation if validation failed"""
         if not self.valid:
             error_details = {
                 "node_id": node_id,
@@ -96,10 +96,10 @@ class ValidationResult:
 
 class ContractValidator:
     """
-    合同验证器
+    Contract validator
 
-    实现 7.1 节定义的最小合同语言验证
-    支持的类型：object, array, string, number, boolean, null
+    Implements minimum contract language validation as defined in Section 7.1
+    Supported types: object, array, string, number, boolean, null
     """
 
     SUPPORTED_TYPES: Set[str] = {
@@ -118,19 +118,19 @@ class ContractValidator:
         self, value: Any, contract: Contract, path: str = "$"
     ) -> ValidationResult:
         """
-        验证值是否符合合同
+        Validate if a value conforms to the contract
 
         Args:
-            value: 待验证的值
-            contract: 合同定义
-            path: 当前验证路径（用于错误报告）
+            value: Value to validate
+            contract: Contract definition
+            path: Current validation path (for error reporting)
 
         Returns:
-            ValidationResult: 验证结果
+            ValidationResult: Validation result
         """
-        # 检查合同类型是否支持
+        # Check if contract type is supported
         if contract.type not in self.SUPPORTED_TYPES:
-            # 不可验证的部分标记为警告，不阻塞执行
+            # Mark unvalidated parts as warnings, don't block execution
             result = ValidationResult(valid=True)
             result.add_warning(
                 f"Unsupported contract type '{contract.type}' at path '{path}', "
@@ -141,7 +141,7 @@ class ContractValidator:
             )
             return result
 
-        # 处理 null 值
+        # Handle null values
         if value is None:
             if contract.type == "null":
                 return ValidationResult(valid=True)
@@ -157,7 +157,7 @@ class ContractValidator:
                 )
                 return result
 
-        # 根据类型进行验证
+        # Validate based on type
         if contract.type == "object":
             return self._validate_object(value, contract, path)
         elif contract.type == "array":
@@ -169,7 +169,7 @@ class ContractValidator:
         elif contract.type == "boolean":
             return self._validate_scalar(value, bool, "boolean", path)
         elif contract.type == "null":
-            # 前面已经处理了 null 的情况，到这里说明值不是 null
+            # Already handled null case above, reaching here means value is not null
             result = ValidationResult(valid=False)
             result.add_error(
                 ContractValidationError(
@@ -181,16 +181,16 @@ class ContractValidator:
             )
             return result
 
-        # 不应该到达这里，但为了类型安全
+        # Should not reach here, but kept for type safety
         return ValidationResult(valid=True)
 
     def _validate_object(
         self, value: Any, contract: Contract, path: str
     ) -> ValidationResult:
-        """验证对象类型"""
+        """Validate object type"""
         result = ValidationResult()
 
-        # 类型检查
+        # Type check
         if not isinstance(value, dict):
             result.add_error(
                 ContractValidationError(
@@ -202,7 +202,7 @@ class ContractValidator:
             )
             return result
 
-        # 检查 required 字段
+        # Check required fields
         if contract.required:
             for field in contract.required:
                 if field not in value:
@@ -215,7 +215,7 @@ class ContractValidator:
                         )
                     )
 
-        # 递归验证 properties
+        # Recursively validate properties
         if contract.properties:
             for field_name, field_contract in contract.properties.items():
                 if field_name in value:
@@ -229,10 +229,10 @@ class ContractValidator:
     def _validate_array(
         self, value: Any, contract: Contract, path: str
     ) -> ValidationResult:
-        """验证数组类型"""
+        """Validate array type"""
         result = ValidationResult()
 
-        # 类型检查
+        # Type check
         if not isinstance(value, list):
             result.add_error(
                 ContractValidationError(
@@ -244,7 +244,7 @@ class ContractValidator:
             )
             return result
 
-        # 验证每个元素
+        # Validate each element
         if contract.items:
             for idx, item in enumerate(value):
                 item_result = self.validate(item, contract.items, f"{path}[{idx}]")
@@ -255,7 +255,7 @@ class ContractValidator:
     def _validate_scalar(
         self, value: Any, expected_type: type, type_name: str, path: str
     ) -> ValidationResult:
-        """验证标量类型"""
+        """Validate scalar type"""
         if not isinstance(value, expected_type):
             return ValidationResult(
                 valid=False,
@@ -271,9 +271,9 @@ class ContractValidator:
         return ValidationResult(valid=True)
 
     def _validate_number(self, value: Any, path: str) -> ValidationResult:
-        """验证数字类型（int 或 float）"""
+        """Validate number type (int or float)"""
         if not isinstance(value, (int, float)) or isinstance(value, bool):
-            # bool 是 int 的子类，需要排除
+            # bool is subclass of int, need to exclude it
             return ValidationResult(
                 valid=False,
                 errors=[
@@ -289,22 +289,22 @@ class ContractValidator:
 
     def validate_in_contract(self, node: Node, state: StateManager) -> ValidationResult:
         """
-        验证节点的 in_contract
+        Validate node's in_contract
 
         Args:
-            node: 节点定义
-            state: 状态管理器
+            node: Node definition
+            state: State manager
 
         Returns:
-            ValidationResult: 验证结果
+            ValidationResult: Validation result
         """
         if not node.in_contract:
             return ValidationResult(valid=True)
 
         self.logger.debug("Validating in_contract for node '%s'", node.id)
 
-        # 从 reads 路径获取输入值进行验证
-        # 如果节点没有定义 reads，则验证整个状态
+        # Get input values from reads paths for validation
+        # If node has no reads defined, validate entire state
         if node.reads:
             result = ValidationResult()
             for read_path in node.reads:
@@ -313,36 +313,36 @@ class ContractValidator:
                 result.merge(path_result)
             return result
         else:
-            # 没有定义 reads，验证整个状态
+            # No reads defined, validate entire state
             return self.validate(state.get_full_state(), node.in_contract, "$")
 
     def validate_out_contract(
         self, node: Node, changeset: ChangeSet, state: StateManager
     ) -> ValidationResult:
         """
-        验证节点的 out_contract
+        Validate node's out_contract
 
-        在变更集应用后验证相关路径的值
+        Validate values at relevant paths after changeset is applied
 
         Args:
-            node: 节点定义
-            changeset: 变更集
-            state: 状态管理器
+            node: Node definition
+            changeset: Change set
+            state: State manager
 
         Returns:
-            ValidationResult: 验证结果
+            ValidationResult: Validation result
         """
         if not node.out_contract:
             return ValidationResult(valid=True)
 
         self.logger.debug("Validating out_contract for node '%s'", node.id)
 
-        # 创建临时状态，应用变更集
+        # Create temporary state, apply changeset
         temp_state = copy.deepcopy(state.get_full_state())
         changeset.apply_to(temp_state)
 
-        # 从 writes 路径获取输出值进行验证
-        # 如果节点没有定义 writes，则验证整个状态
+        # Get output values from writes paths for validation
+        # If node has no writes defined, validate entire state
         if node.writes:
             result = ValidationResult()
             for write_path in node.writes:
@@ -351,5 +351,5 @@ class ContractValidator:
                 result.merge(path_result)
             return result
         else:
-            # 没有定义 writes，验证整个状态
+            # No writes defined, validate entire state
             return self.validate(temp_state, node.out_contract, "$")

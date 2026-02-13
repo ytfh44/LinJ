@@ -1,21 +1,21 @@
 """
-调度器实现
+Scheduler implementation
 
-从autogen/executor/scheduler.py迁移并重构的调度器实现，兼容现有AutoGen调度逻辑。
+Scheduler implementation migrated and refactored from autogen/executor/scheduler.py, compatible with existing AutoGen scheduling logic.
 """
 
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Mapping, Tuple
 
-# 尝试导入现有模块进行兼容
+# Try importing existing modules for compatibility
 try:
     from ..core.nodes import Node
     from ..core.path import PathResolver
     from ..core.document import LinJDocument, Placement
     from ..core.edges import Edge, DependencyGraph, EdgeKind
 except ImportError:
-    # 回退到基本类型
+    # Fallback to basic types
     Node = Any
     PathResolver = Any
     LinJDocument = Any
@@ -35,9 +35,9 @@ from .scheduler import (
 @dataclass
 class ExecutionDomain:
     """
-    执行域
+    Execution Domain
 
-    表示一组可以在一起执行的节点和资源（15.2 节）
+    Represents a set of nodes and resources that can be executed together (Section 15.2)
     """
 
     node_ids: Set[str]
@@ -47,17 +47,17 @@ class ExecutionDomain:
 
 class DomainAllocator:
     """
-    执行域分配器
+    Execution Domain Allocator
 
-    根据 placement 声明和 resource 依赖分配执行域（15.2 节、25 节）
+    Allocates execution domains based on placement declarations and resource dependencies (Section 15.2, Section 25)
     """
 
     def __init__(self, available_domains: Optional[Set[str]] = None):
         """
-        初始化域分配器
+        Initialize domain allocator
 
         Args:
-            available_domains: 可用的执行域集合（可选，None 表示无限制）
+            available_domains: Set of available execution domains (optional, None means no limit)
         """
         self.available_domains = available_domains
 
@@ -65,19 +65,19 @@ class DomainAllocator:
         self, doc: LinJDocument, edges: Optional[List[Edge]] = None
     ) -> Mapping[str, ExecutionDomain]:
         """
-        为节点分配执行域
+        Allocate execution domains for nodes
 
-        分配策略：
-        1. 首先根据 placement 声明分配同域约束
-        2. 然后根据 kind=resource 依赖分配同域约束
-        3. 剩余节点分配到默认域
+        Allocation strategy:
+        1. First apply same-domain constraints based on placement declarations
+        2. Then apply same-domain constraints based on kind=resource dependencies
+        3. Remaining nodes are assigned to default domain
 
         Args:
-            doc: LinJ 文档对象
-            edges: 依赖边列表（可选，默认使用 doc.edges）
+            doc: LinJ document object
+            edges: List of dependency edges (optional, uses doc.edges by default)
 
         Returns:
-            节点ID到执行域的映射
+            Mapping from node IDs to execution domains
         """
         if edges is None:
             edges = doc.edges
@@ -85,40 +85,40 @@ class DomainAllocator:
         node_ids = doc.get_node_ids()
         graph = DependencyGraph(edges)
 
-        # 初始化：每个节点一个域
+        # Initialize: one domain per node
         domain_map: Dict[str, ExecutionDomain] = {}
         for node_id in node_ids:
             domain_map[node_id] = ExecutionDomain(
                 node_ids={node_id}, resource_names=set(), domain_label=None
             )
 
-        # 应用 placement 同域约束
+        # Apply placement same-domain constraints
         domain_map = self._apply_placement_constraints(doc.placement, domain_map)
 
-        # 应用 resource 依赖同域约束
+        # Apply resource dependency same-domain constraints
         domain_map = self._apply_resource_constraints(edges, domain_map, graph)
 
         return domain_map
 
     def can_share_domain(self, node_a: str, node_b: str, edges: List[Edge]) -> bool:
         """
-        判断两个节点是否可以共享同一执行域
+        Determine if two nodes can share the same execution domain
 
-        两个节点可以共享执行域，当且仅当：
-        - 它们之间没有相互依赖（循环）
-        - 它们之间没有冲突的 writes 路径
+        Two nodes can share an execution domain if and only if:
+        - There is no mutual dependency between them (cycle)
+        - There are no conflicting writes paths between them
 
         Args:
-            node_a: 第一个节点
-            node_b: 第二个节点
-            edges: 依赖边列表
+            node_a: First node
+            node_b: Second node
+            edges: List of dependency edges
 
         Returns:
-            是否可以共享执行域
+            Whether the nodes can share an execution domain
         """
         graph = DependencyGraph(edges)
 
-        # 检查是否有相互依赖
+        # Check for mutual dependencies
         deps_a = graph.get_data_dependencies(node_a) + graph.get_control_dependencies(
             node_a
         )
@@ -127,7 +127,7 @@ class DomainAllocator:
         )
 
         if node_b in deps_a and node_a in deps_b:
-            return False  # 相互依赖，不能同域
+            return False  # Mutual dependency, cannot be in same domain
 
         return True
 
@@ -137,19 +137,19 @@ class DomainAllocator:
         domain_map: Dict[str, ExecutionDomain],
     ) -> Dict[str, ExecutionDomain]:
         """
-        应用 placement 同域约束
+        Apply placement same-domain constraints
 
         Args:
-            placement: 放置声明列表
-            domain_map: 当前域映射
+            placement: List of placement declarations
+            domain_map: Current domain mapping
 
         Returns:
-            应用约束后的域映射
+            Domain mapping after applying constraints
         """
         if not placement:
             return domain_map
 
-        # 按 domain 分组
+        # Group by domain
         domain_groups: Dict[str, Set[str]] = {}
         for p in placement:
             if p.target not in domain_map:
@@ -159,7 +159,7 @@ class DomainAllocator:
                 domain_groups[p.domain] = set()
             domain_groups[p.domain].add(p.target)
 
-        # 合并同一域的节点
+        # Merge nodes in same domain
         for domain, targets in domain_groups.items():
             domain_map = self._merge_domains(targets, domain_map, domain_label=domain)
 
@@ -172,17 +172,17 @@ class DomainAllocator:
         graph: DependencyGraph,
     ) -> Dict[str, ExecutionDomain]:
         """
-        应用 kind=resource 依赖同域约束
+        Apply kind=resource dependency same-domain constraints
 
         Args:
-            edges: 依赖边列表
-            domain_map: 当前域映射
-            graph: 依赖图
+            edges: List of dependency edges
+            domain_map: Current domain mapping
+            graph: Dependency graph
 
         Returns:
-            应用约束后的域映射
+            Domain mapping after applying constraints
         """
-        # 按 resource_name 分组边
+        # Group edges by resource_name
         resource_edges: Dict[str, List[Edge]] = {}
         for edge in edges:
             if edge.is_resource() and edge.resource_name:
@@ -190,7 +190,7 @@ class DomainAllocator:
                     resource_edges[edge.resource_name] = []
                 resource_edges[edge.resource_name].append(edge)
 
-        # 将使用同一 resource 的节点合并到同一域
+        # Merge nodes using same resource into same domain
         for resource_name, resource_deps in resource_edges.items():
             nodes_in_resource: Set[str] = set()
             for edge in resource_deps:
@@ -213,15 +213,15 @@ class DomainAllocator:
         domain_label: Optional[str] = None,
     ) -> Dict[str, ExecutionDomain]:
         """
-        合并一组目标到同一执行域
+        Merge a set of targets into the same execution domain
 
         Args:
-            targets: 要合并的目标集合
-            domain_map: 当前域映射
-            domain_label: 域标签
+            targets: Set of targets to merge
+            domain_map: Current domain mapping
+            domain_label: Domain label
 
         Returns:
-            合并后的域映射
+            Merged domain mapping
         """
         if len(targets) <= 1:
             return domain_map
@@ -230,21 +230,21 @@ class DomainAllocator:
         first_target = targets_list[0]
         merged_domain = domain_map[first_target]
 
-        # 合并所有目标到第一个目标的域
+        # Merge all targets into the first target's domain
         for target in targets_list[1:]:
             target_domain = domain_map[target]
 
-            # 合并节点集合
+            # Merge node sets
             merged_domain.node_ids.update(target_domain.node_ids)
 
-            # 合并资源集合
+            # Merge resource sets
             merged_domain.resource_names.update(target_domain.resource_names)
 
-            # 更新目标节点的域引用
+            # Update domain reference for target nodes
             for node_id in target_domain.node_ids:
                 domain_map[node_id] = merged_domain
 
-        # 设置域标签
+        # Set domain label
         if domain_label:
             merged_domain.domain_label = domain_label
 
@@ -253,9 +253,9 @@ class DomainAllocator:
 
 class ExecutionState:
     """
-    执行状态追踪
+    Execution State Tracker
 
-    追踪节点执行状态，用于依赖解析
+    Tracks node execution states, used for dependency resolution
     """
 
     def __init__(self):
@@ -264,7 +264,7 @@ class ExecutionState:
         self.cancelled: Set[str] = set()
 
     def is_terminal(self, node_id: str) -> bool:
-        """检查节点是否已到达终态"""
+        """Check if node has reached terminal state"""
         return (
             node_id in self.completed
             or node_id in self.failed
@@ -272,38 +272,38 @@ class ExecutionState:
         )
 
     def is_successful(self, node_id: str) -> bool:
-        """检查节点是否成功完成"""
+        """Check if node completed successfully"""
         return node_id in self.completed
 
 
 class AutoGenDeterministicScheduler(DeterministicScheduler):
     """
-    AutoGen兼容的决定性调度器
+    AutoGen-compatible deterministic scheduler
 
-    基于原有AutoGen调度逻辑重构，保持兼容性
+    Refactored from original AutoGen scheduling logic, maintaining compatibility
     """
 
     def __init__(self, nodes: List[Node]):
         super().__init__(nodes)
-        # 添加AutoGen特定的状态管理
+        # Add AutoGen-specific state management
         self._execution_state = ExecutionState()
 
     def select_nodes(
         self, ready_nodes: List[Any], context, max_concurrency: Optional[int] = None
     ) -> SchedulingDecision:
-        """选择节点进行执行（AutoGen兼容）"""
-        # 过滤可执行的节点
+        """Select nodes for execution (AutoGen-compatible)"""
+        # Filter executable nodes
         executable_nodes = []
         executed_this_round = getattr(context, "executed_this_round", set())
 
         for node in ready_nodes:
             node_id = getattr(node, "id", "unknown")
 
-            # 检查是否已在执行中
+            # Check if already executing
             if self.is_executing(node_id):
                 continue
 
-            # 检查本轮是否已执行
+            # Check if already executed this round
             allow_reenter = getattr(node, "policy", None)
             allow_reenter = (
                 getattr(allow_reenter, "allow_reenter", False)
@@ -314,7 +314,7 @@ class AutoGenDeterministicScheduler(DeterministicScheduler):
             if node_id in executed_this_round and not allow_reenter:
                 continue
 
-            # 检查是否满足前置依赖
+            # Check if prerequisites are satisfied
             if not self._are_dependencies_satisfied(node_id, context):
                 continue
 
@@ -329,11 +329,11 @@ class AutoGenDeterministicScheduler(DeterministicScheduler):
                 metadata={"reason": "no_executable_nodes"},
             )
 
-        # 按决定性规则排序
+        # Sort by deterministic rules
         sorted_nodes = self._sort_deterministically(executable_nodes)
         selected_node = sorted_nodes[0]
 
-        # 记录批量大小
+        # Record batch size
         self._stats["batch_sizes"].append(1)
 
         return SchedulingDecision(
@@ -349,27 +349,27 @@ class AutoGenDeterministicScheduler(DeterministicScheduler):
         )
 
     def _are_dependencies_satisfied(self, node_id: str, context) -> bool:
-        """检查节点的依赖是否已满足"""
-        # 获取依赖图和执行状态
+        """Check if node dependencies are satisfied"""
+        # Get dependency graph and execution state
         graph = getattr(context, "dependency_graph", None)
         if not graph:
             return True
 
-        # 获取所有前置依赖节点
+        # Get all prerequisite nodes
         deps = graph.get_data_dependencies(node_id)
         deps.extend(graph.get_control_dependencies(node_id))
 
-        # 去重
+        # Deduplicate
         deps = list(set(deps))
 
         if not deps:
             return True
 
-        # 检查所有依赖是否已完成
+        # Check if all dependencies are completed
         return all(self._execution_state.is_terminal(dep) for dep in deps)
 
     def get_dependencies(self, node: Any) -> List[str]:
-        """获取节点的依赖列表"""
+        """Get node's dependency list"""
         return getattr(node, "dependencies", [])
 
 
@@ -377,19 +377,19 @@ def select_next_node(
     ready_nodes: List[Node], node_order: Dict[str, int]
 ) -> Optional[Node]:
     """
-    按决定性顺序选择下一个节点 (11.3 节)
+    Select next node in deterministic order (Section 11.3)
 
-    优先级：
-    1. rank 较大者优先（未提供视为 0）
-    2. nodes 数组中靠前者优先（通过 node_order 字典）
-    3. 若仍相同，按 node_id 字典序
+    Priority:
+    1. Higher rank first (0 if not provided)
+    2. Earlier in nodes array first (via node_order dict)
+    3. If still tied, by node_id lexicographically
 
     Args:
-        ready_nodes: 可调度节点列表
-        node_order: 节点在原数组中的顺序
+        ready_nodes: List of schedulable nodes
+        node_order: Node order in original array
 
     Returns:
-        选中的节点，或 None（如果没有就绪节点）
+        Selected node, or None if no ready nodes
     """
     if not ready_nodes:
         return None
@@ -399,7 +399,7 @@ def select_next_node(
         rank = rank if rank is not None else 0.0
         order = node_order.get(getattr(node, "id", "unknown"), float("inf"))
         node_id = getattr(node, "id", "unknown")
-        return (-rank, order, node_id)  # 负 rank 实现降序
+        return (-rank, order, node_id)  # Negative rank for descending order
 
     sorted_nodes = sorted(ready_nodes, key=sort_key)
     return sorted_nodes[0]
@@ -407,9 +407,9 @@ def select_next_node(
 
 def get_node_path_set(node: Node, use_writes: bool = True) -> Set[str]:
     """
-    获取节点的路径集合
+    Get node's path set
 
-    如果节点没有声明 reads/writes，视为整个状态（返回 {"$"}
+    If node doesn't declare reads/writes, consider entire state (return {"$"})
     """
     if use_writes:
         paths = getattr(node, "writes", [])
@@ -417,7 +417,7 @@ def get_node_path_set(node: Node, use_writes: bool = True) -> Set[str]:
         paths = getattr(node, "reads", [])
 
     if not paths:
-        # 6.1 节：缺失声明视为读取/写入整个主状态
+        # Section 6.1: Missing declaration means read/write entire main state
         return {"$"}
 
     return set(paths)
@@ -425,11 +425,11 @@ def get_node_path_set(node: Node, use_writes: bool = True) -> Set[str]:
 
 def check_path_intersection(paths_a: Set[str], paths_b: Set[str]) -> bool:
     """
-    检查两组路径是否有相交 (11.4 节)
+    Check if two path sets intersect (Section 11.4)
 
-    两条路径相交当且仅当：
-    - 一条路径是另一条的前缀
-    - 两条路径完全相同
+    Two paths intersect if and only if:
+    - One path is a prefix of the other
+    - Two paths are exactly the same
     """
     for path_a in paths_a:
         for path_b in paths_b:
@@ -440,30 +440,30 @@ def check_path_intersection(paths_a: Set[str], paths_b: Set[str]) -> bool:
 
 def check_concurrent_safety(node_a: Node, node_b: Node) -> bool:
     """
-    检查两个节点是否可以安全并发执行 (11.5 节)
+    Check if two nodes can be safely executed concurrently (Section 11.5)
 
-    并发安全条件：
-    - 两个节点的 writes 集合互不相交
-    - 任一节点的 reads 不与另一节点的 writes 相交
+    Concurrent safety conditions:
+    - Both nodes' writes sets are disjoint
+    - Neither node's reads intersect with the other's writes
 
     Args:
-        node_a: 第一个节点
-        node_b: 第二个节点
+        node_a: First node
+        node_b: Second node
 
     Returns:
-        True 表示可以安全并发，False 表示不能并发
+        True if safe to execute concurrently, False otherwise
     """
-    # 获取路径集合
+    # Get path sets
     reads_a = get_node_path_set(node_a, use_writes=False)
     writes_a = get_node_path_set(node_a, use_writes=True)
     reads_b = get_node_path_set(node_b, use_writes=False)
     writes_b = get_node_path_set(node_b, use_writes=True)
 
-    # 检查 writes 互不相交
+    # Check writes are disjoint
     if check_path_intersection(writes_a, writes_b):
         return False
 
-    # 检查 reads 不与对方 writes 相交
+    # Check reads don't intersect with other's writes
     if check_path_intersection(reads_a, writes_b):
         return False
     if check_path_intersection(reads_b, writes_a):
@@ -476,14 +476,14 @@ def find_concurrent_groups(
     nodes: List[Node], domain_map: Optional[Mapping[str, ExecutionDomain]] = None
 ) -> List[List[Node]]:
     """
-    将节点分组，每组内的节点可以安全并发执行
+    Group nodes such that nodes within each group can be safely executed concurrently
 
-    使用贪心算法：遍历节点，尝试将节点加入现有组，
-    如果不能加入任何组，则创建新组
+    Uses greedy algorithm: iterate through nodes, try to add node to existing group,
+    if cannot join any group, create new group
 
-    11.5 节 & 25 节：
-    - 组内节点必须 writes/reads 互不相交
-    - 组内节点必须属于不同的执行域
+    Section 11.5 & 25:
+    - Nodes within a group must have disjoint writes/reads
+    - Nodes within a group must belong to different execution domains
     """
     if not nodes:
         return []
@@ -497,11 +497,11 @@ def find_concurrent_groups(
         )
 
         for group in groups:
-            # 检查是否可以加入该组
-            # 1. 检查并发安全性（路径相交）
+            # Check if can join the group
+            # 1. Check concurrent safety (path intersection)
             can_join = all(check_concurrent_safety(node, member) for member in group)
 
-            # 2. 检查执行域约束（同域节点必须串行）
+            # 2. Check execution domain constraint (same-domain nodes must be serial)
             if can_join and node_domain:
                 can_join = all(
                     domain_map.get(getattr(member, "id", "unknown")) is not node_domain
@@ -526,35 +526,35 @@ def are_dependencies_satisfied(
     check_all: bool = True,
 ) -> bool:
     """
-    检查节点的依赖是否已满足
+    Check if node dependencies are satisfied
 
-    节点的所有 data/control 前置依赖必须已到达终态
+    All data/control prerequisite dependencies of a node must have reached terminal state
 
     Args:
-        node_id: 节点 ID
-        graph: 依赖图
-        exec_state: 执行状态
-        check_all: 是否检查所有依赖。
-                  对于循环入口节点，如果 check_all=False，则只需满足一个依赖即可（即 OR 语义）
-                  但在 LinJ 规范下，默认仍为 AND 语义。
+        node_id: Node ID
+        graph: Dependency graph
+        exec_state: Execution state
+        check_all: Whether to check all dependencies.
+                  For cycle entry nodes, if check_all=False, only need to satisfy one dependency (OR semantics)
+                  But under LinJ specification, default is still AND semantics.
     """
-    # 获取所有前置依赖节点
+    # Get all prerequisite nodes
     deps = graph.get_data_dependencies(node_id)
     deps.extend(graph.get_control_dependencies(node_id))
 
-    # 去重
+    # Deduplicate
     deps = list(set(deps))
 
     if not deps:
         return True
 
-    # 简单的 AND 语义
+    # Simple AND semantics
     if check_all:
         return all(exec_state.is_terminal(dep) for dep in deps)
     else:
-        # OR 语义：只要有一个依赖已满足
+        # OR semantics: only need one dependency satisfied
         return any(exec_state.is_terminal(dep) for dep in deps)
 
 
-# 日志记录器
+# Logger
 logger = logging.getLogger(__name__)

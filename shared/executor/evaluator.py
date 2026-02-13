@@ -1,7 +1,7 @@
 """
-求值器抽象类
+Abstract Evaluator Class
 
-定义条件表达式求值的抽象接口，支持多种求值策略和表达式语法。
+Defines the abstract interface for conditional expression evaluation, supporting multiple evaluation strategies and expression syntaxes.
 """
 
 from abc import ABC, abstractmethod
@@ -13,16 +13,16 @@ from .types import ExecutionContext
 
 
 class EvaluationStrategy(Enum):
-    """求值策略枚举"""
+    """Evaluation strategy enumeration"""
 
-    STRICT = "strict"  # 严格求值
-    LAZY = "lazy"  # 惰性求值
-    SHORT_CIRCUIT = "short_circuit"  # 短路求值
-    PARALLEL = "parallel"  # 并行求值
+    STRICT = "strict"  # Strict evaluation
+    LAZY = "lazy"  # Lazy evaluation
+    SHORT_CIRCUIT = "short_circuit"  # Short-circuit evaluation
+    PARALLEL = "parallel"  # Parallel evaluation
 
 
 class TokenType(Enum):
-    """词法单元类型"""
+    """Lexical unit type"""
 
     NUMBER = "number"
     STRING = "string"
@@ -39,7 +39,7 @@ class TokenType(Enum):
 
 @dataclass
 class Token:
-    """词法单元"""
+    """Lexical unit"""
 
     type: TokenType
     value: Any
@@ -51,7 +51,7 @@ class Token:
 
 @dataclass
 class EvaluationResult:
-    """求值结果"""
+    """Evaluation result"""
 
     success: bool
     value: Any = None
@@ -61,13 +61,13 @@ class EvaluationResult:
 
 class Evaluator(ABC):
     """
-    求值器抽象基类
+    Abstract Evaluator Base Class
 
-    定义条件表达式求值的核心接口：
-    - 词法分析和语法解析
-    - 表达式求值执行
-    - 错误处理和恢复
-    - 性能优化和缓存
+    Defines the core interface for conditional expression evaluation:
+    - Lexical analysis and syntax parsing
+    - Expression evaluation execution
+    - Error handling and recovery
+    - Performance optimization and caching
     """
 
     @abstractmethod
@@ -78,87 +78,87 @@ class Evaluator(ABC):
         strategy: Optional[EvaluationStrategy] = None,
     ) -> EvaluationResult:
         """
-        求值表达式
+        Evaluate expression
 
         Args:
-            expression: 条件表达式字符串
-            context: 执行上下文
-            strategy: 求值策略
+            expression: Conditional expression string
+            context: Execution context
+            strategy: Evaluation strategy
 
         Returns:
-            求值结果
+            Evaluation result
         """
         pass
 
     @abstractmethod
     def tokenize(self, expression: str) -> List[Token]:
         """
-        词法分析
+        Lexical analysis
 
         Args:
-            expression: 表达式字符串
+            expression: Expression string
 
         Returns:
-            词法单元列表
+            List of lexical units
         """
         pass
 
     @abstractmethod
     def parse(self, tokens: List[Token]) -> Any:
         """
-        语法分析
+        Syntax analysis
 
         Args:
-            tokens: 词法单元列表
+            tokens: List of lexical units
 
         Returns:
-            语法树（抽象语法树的节点）
+            Syntax tree (nodes of abstract syntax tree)
         """
         pass
 
     @abstractmethod
     def validate_expression(self, expression: str) -> bool:
         """
-        验证表达式语法
+        Validate expression syntax
 
         Args:
-            expression: 表达式字符串
+            expression: Expression string
 
         Returns:
-            True 表示语法正确，False 表示有错误
+            True if syntax is correct, False if there are errors
         """
         pass
 
     def get_value(self, path: str, context: ExecutionContext) -> Any:
         """
-        从上下文中获取路径值
+        Get path value from context
 
         Args:
-            path: 状态路径
-            context: 执行上下文
+            path: State path
+            context: Execution context
 
         Returns:
-            路径对应的值
+            Value corresponding to the path
         """
         return context.get_state_value(path)
 
     def set_value(self, path: str, value: Any, context: ExecutionContext) -> None:
         """
-        在上下文中设置路径值
+        Set path value in context
 
         Args:
-            path: 状态路径
-            value: 要设置的值
-            context: 执行上下文
+            path: State path
+            value: Value to set
+            context: Execution context
         """
         context.set_state_value(path, value)
 
 
 class BaseEvaluator(Evaluator):
     """
-    基础求值器实现
+    Base Evaluator Implementation
 
-    提供通用的表达式求值逻辑和错误处理
+    Provides common expression evaluation logic and error handling
     """
 
     def __init__(self):
@@ -175,10 +175,10 @@ class BaseEvaluator(Evaluator):
         context: ExecutionContext,
         strategy: Optional[EvaluationStrategy] = None,
     ) -> EvaluationResult:
-        """求值表达式"""
+        """Evaluate expression"""
         strategy = strategy or EvaluationStrategy.STRICT
 
-        # 检查缓存
+        # Check cache
         cache_key = f"{expression}:{id(context)}:{strategy.value}"
         if cache_key in self._cache:
             self._stats["cache_hits"] += 1
@@ -187,13 +187,13 @@ class BaseEvaluator(Evaluator):
         self._stats["total_evaluations"] += 1
 
         try:
-            # 词法分析
+            # Lexical analysis
             tokens = self.tokenize(expression)
 
-            # 语法分析
+            # Syntax analysis
             ast = self.parse(tokens)
 
-            # 根据策略求值
+            # Evaluate based on strategy
             if strategy == EvaluationStrategy.SHORT_CIRCUIT:
                 result = self._evaluate_short_circuit(ast, context)
             elif strategy == EvaluationStrategy.LAZY:
@@ -203,7 +203,7 @@ class BaseEvaluator(Evaluator):
             else:  # STRICT
                 result = self._evaluate_strict(ast, context)
 
-            # 缓存结果
+            # Cache result
             self._cache[cache_key] = result
 
             return result
@@ -213,42 +213,42 @@ class BaseEvaluator(Evaluator):
             return EvaluationResult(success=False, error=e)
 
     def _evaluate_strict(self, ast: Any, context: ExecutionContext) -> EvaluationResult:
-        """严格求值"""
+        """Strict evaluation"""
         value = self._evaluate_node(ast, context)
         return EvaluationResult(success=True, value=self._to_boolean(value))
 
     def _evaluate_short_circuit(
         self, ast: Any, context: ExecutionContext
     ) -> EvaluationResult:
-        """短路求值"""
-        # 实现AND/OR的短路逻辑
+        """Short-circuit evaluation"""
+        # Implement AND/OR short-circuit logic
         return self._evaluate_node_with_short_circuit(ast, context)
 
     def _evaluate_lazy(self, ast: Any, context: ExecutionContext) -> EvaluationResult:
-        """惰性求值"""
-        # 延迟计算直到真正需要
+        """Lazy evaluation"""
+        # Delay calculation until truly needed
         return self._evaluate_strict(ast, context)
 
     def _evaluate_parallel(
         self, ast: Any, context: ExecutionContext
     ) -> EvaluationResult:
-        """并行求值"""
-        # 并行计算独立子表达式
+        """Parallel evaluation"""
+        # Compute independent sub-expressions in parallel
         return self._evaluate_strict(ast, context)
 
     @abstractmethod
     def _evaluate_node(self, node: Any, context: ExecutionContext) -> Any:
-        """求值单个节点"""
+        """Evaluate single node"""
         pass
 
     def _evaluate_node_with_short_circuit(
         self, node: Any, context: ExecutionContext
     ) -> Any:
-        """带短路逻辑的节点求值"""
+        """Node evaluation with short-circuit logic"""
         return self._evaluate_node(node, context)
 
     def _to_boolean(self, value: Any) -> bool:
-        """将值转换为布尔类型"""
+        """Convert value to boolean type"""
         if value is None:
             return False
         if isinstance(value, bool):
@@ -262,7 +262,7 @@ class BaseEvaluator(Evaluator):
         return bool(value)
 
     def validate_expression(self, expression: str) -> bool:
-        """验证表达式语法"""
+        """Validate expression syntax"""
         try:
             tokens = self.tokenize(expression)
             self.parse(tokens)
@@ -271,7 +271,7 @@ class BaseEvaluator(Evaluator):
             return False
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取求值统计信息"""
+        """Get evaluation statistics"""
         return {
             "total_evaluations": self._stats["total_evaluations"],
             "cache_hits": self._stats["cache_hits"],
@@ -284,11 +284,11 @@ class BaseEvaluator(Evaluator):
         }
 
     def clear_cache(self) -> None:
-        """清空缓存"""
+        """Clear cache"""
         self._cache.clear()
 
     def reset_stats(self) -> None:
-        """重置统计信息"""
+        """Reset statistics"""
         self._stats = {
             "total_evaluations": 0,
             "cache_hits": 0,
@@ -298,9 +298,9 @@ class BaseEvaluator(Evaluator):
 
 class SimpleEvaluator(BaseEvaluator):
     """
-    简单求值器
+    Simple Evaluator
 
-    支持基本的条件表达式求值
+    Supports basic conditional expression evaluation
     """
 
     def __init__(self):
@@ -323,12 +323,12 @@ class SimpleEvaluator(BaseEvaluator):
         }
 
     def tokenize(self, expression: str) -> List[Token]:
-        """简单的词法分析"""
+        """Simple lexical analysis"""
         import re
 
-        # 定义词法模式
+        # Define lexical patterns
         token_patterns = [
-            (r"\s+", None),  # 空白，跳过
+            (r"\s+", None),  # Whitespace, skip
             (r"\d+(?:\.\d+)?", TokenType.NUMBER),
             (r'"[^"]*"', TokenType.STRING),
             (r"true|false", TokenType.BOOLEAN),
@@ -356,20 +356,20 @@ class SimpleEvaluator(BaseEvaluator):
                     if token_type:
                         value = match.group(0)
 
-                        # 处理不同类型的值
+                        # Handle different types of values
                         if token_type == TokenType.NUMBER:
                             if "." in value:
                                 value = float(value)
                             else:
                                 value = int(value)
                         elif token_type == TokenType.STRING:
-                            value = value[1:-1]  # 去掉引号
+                            value = value[1:-1]  # Remove quotes
                         elif token_type == TokenType.BOOLEAN:
                             value = value == "true"
                         elif token_type == TokenType.NULL:
                             value = None
                         elif token_type == TokenType.FUNCTION:
-                            # 提取函数名，去掉括号
+                            # Extract function name, remove parentheses
                             value = value.replace("(", "")
 
                         tokens.append(Token(token_type, value, pos))
@@ -387,14 +387,14 @@ class SimpleEvaluator(BaseEvaluator):
         return tokens
 
     def parse(self, tokens: List[Token]) -> Any:
-        """简单的语法分析（转换为中缀表达式列表）"""
-        # 这是一个简化实现，实际应该构建真正的AST
+        """Simple syntax analysis (converted to infix expression list)"""
+        # This is a simplified implementation, actual should build a real AST
         return tokens
 
     def _evaluate_node(self, node: Any, context: ExecutionContext) -> Any:
-        """求值节点"""
+        """Evaluate node"""
         if isinstance(node, list):
-            # 中缀表达式求值
+            # Infix expression evaluation
             return self._evaluate_infix(node, context)
         elif isinstance(node, Token):
             return self._evaluate_token(node, context)
@@ -402,7 +402,7 @@ class SimpleEvaluator(BaseEvaluator):
             return node
 
     def _evaluate_token(self, token: Token, context: ExecutionContext) -> Any:
-        """求值词法单元"""
+        """Evaluate lexical unit"""
         if token.type == TokenType.NUMBER:
             return token.value
         elif token.type == TokenType.STRING:
@@ -419,9 +419,9 @@ class SimpleEvaluator(BaseEvaluator):
             return token.value
 
     def _evaluate_infix(self, tokens: List[Token], context: ExecutionContext) -> Any:
-        """求值中缀表达式"""
-        # 这是一个非常简化的实现
-        # 实际应该实现完整的表达式求值逻辑
+        """Evaluate infix expression"""
+        # This is a very simplified implementation
+        # Actual should implement complete expression evaluation logic
 
         if len(tokens) == 1:
             return self._evaluate_token(tokens[0], context)
@@ -434,54 +434,54 @@ class SimpleEvaluator(BaseEvaluator):
             if op in self.operators:
                 return self.operators[op](left, right)
 
-        # 默认返回False
+        # Default return False
         return False
 
     def _evaluate_function(self, func_name: str, context: ExecutionContext) -> Any:
-        """求值函数"""
+        """Evaluate function"""
         if func_name in self.functions:
             return self.functions[func_name](context)
         raise ValueError(f"Unknown function: {func_name}")
 
     def _func_exists(self, context: ExecutionContext) -> bool:
-        """exists函数（简化版）"""
-        # 简化实现：总是返回True
+        """exists function (simplified)"""
+        # Simplified implementation: always return True
         return True
 
     def _func_len(self, context: ExecutionContext) -> int:
-        """len函数（简化版）"""
-        # 简化实现：返回0
+        """len function (simplified)"""
+        # Simplified implementation: return 0
         return 0
 
     def _func_value(self, context: ExecutionContext) -> Any:
-        """value函数（简化版）"""
-        # 简化实现：返回None
+        """value function (simplified)"""
+        # Simplified implementation: return None
         return None
 
 
 class RegexEvaluator(SimpleEvaluator):
     """
-    基于正则表达式的高级求值器
+    Advanced Evaluator Based on Regular Expressions
 
-    支持更复杂的表达式语法和求值逻辑
+    Supports more complex expression syntax and evaluation logic
     """
 
     def __init__(self):
         super().__init__()
-        # 构建更复杂的词法模式
+        # Build more complex lexical patterns
         self.build_advanced_patterns()
 
     def build_advanced_patterns(self):
-        """构建高级词法模式"""
-        # 添加数组访问、对象属性等支持
+        """Build advanced lexical patterns"""
+        # Add support for array access, object properties, etc.
         pass
 
     def tokenize(self, expression: str) -> List[Token]:
-        """高级词法分析"""
-        # 使用更复杂的正则表达式
+        """Advanced lexical analysis"""
+        # Use more complex regular expressions
         import re
 
-        # 扩展的词法模式
+        # Extended lexical patterns
         token_patterns = [
             (r"\s+", None),
             (r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?", TokenType.NUMBER),
@@ -498,7 +498,7 @@ class RegexEvaluator(SimpleEvaluator):
             (r"[a-zA-Z_][a-zA-Z0-9_]*\s*\(", TokenType.FUNCTION),
             (r"\(", TokenType.LPAREN),
             (r"\)", TokenType.RPAREN),
-            (r",", None),  # 逗号，跳过
+            (r",", None),  # Comma, skip
         ]
 
         tokens = []
@@ -516,11 +516,13 @@ class RegexEvaluator(SimpleEvaluator):
                     if token_type:
                         value = match.group(0)
 
-                        # 处理转义字符
+                        # Handle escape characters
                         if token_type == TokenType.STRING:
-                            value = eval(value)  # 简化处理，实际应该安全处理转义
+                            value = eval(
+                                value
+                            )  # Simplified handling, should safely handle escapes in practice
 
-                        # 处理函数调用
+                        # Handle function calls
                         elif token_type == TokenType.FUNCTION:
                             value = value.replace("(", "")
 

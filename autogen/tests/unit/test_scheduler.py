@@ -1,7 +1,7 @@
 """
-执行域分配器测试
+Execution Domain Allocator Tests
 
-测试 ExecutionDomain 和 DomainAllocator 类
+Tests ExecutionDomain and DomainAllocator classes
 """
 
 import pytest
@@ -16,15 +16,15 @@ from linj_autogen.executor.scheduler import (
 
 
 def create_edge(**kwargs) -> Edge:
-    """创建 Edge 的辅助函数（使用 from 别名）"""
-    # 将 from_ 转换为 from
+    """Helper function to create Edge (using from alias)"""
+    # Convert from_ to from
     if "from_" in kwargs:
         kwargs["from"] = kwargs.pop("from_")
     return Edge(**kwargs)
 
 
 def create_node_dict(node_id: str) -> Dict[str, Any]:
-    """创建节点字典的辅助函数（使用 ToolNode 格式）"""
+    """Helper function to create node dict (using ToolNode format)"""
     return {
         "id": node_id,
         "type": "tool",
@@ -34,17 +34,17 @@ def create_node_dict(node_id: str) -> Dict[str, Any]:
 
 
 class TestExecutionDomain:
-    """测试 ExecutionDomain 数据类"""
+    """Test ExecutionDomain dataclass"""
 
     def test_create_empty_domain(self):
-        """测试创建空域"""
+        """Test creating empty domain"""
         domain = ExecutionDomain(node_ids=set(), resource_names=set())
         assert len(domain.node_ids) == 0
         assert len(domain.resource_names) == 0
         assert domain.domain_label is None
 
     def test_create_domain_with_label(self):
-        """测试创建带标签的域"""
+        """Test creating domain with label"""
         domain = ExecutionDomain(
             node_ids={"a", "b"},
             resource_names={"res1"},
@@ -56,7 +56,7 @@ class TestExecutionDomain:
 
 
 class TestDomainAllocator:
-    """测试 DomainAllocator 类"""
+    """Test DomainAllocator class"""
 
     def create_test_doc(
         self,
@@ -64,7 +64,7 @@ class TestDomainAllocator:
         edges: List[Edge],
         placement: Optional[List[Placement]] = None,
     ) -> LinJDocument:
-        """创建测试文档"""
+        """Create test document"""
         nodes = [create_node_dict(node_id) for node_id in node_ids]
         return LinJDocument(
             linj_version="1.0",
@@ -74,7 +74,7 @@ class TestDomainAllocator:
         )
 
     def test_allocate_domains_no_constraints(self):
-        """测试无约束时的域分配"""
+        """Test domain allocation without constraints"""
         doc = self.create_test_doc(
             node_ids=["a", "b", "c"],
             edges=[
@@ -84,8 +84,8 @@ class TestDomainAllocator:
         )
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc)
-        
-        # 每个节点应该有自己的域
+
+        # Each node should have its own domain
         assert len(domain_map) == 3
         for node_id in ["a", "b", "c"]:
             assert node_id in domain_map
@@ -93,7 +93,7 @@ class TestDomainAllocator:
             assert node_id in domain.node_ids
 
     def test_allocate_domains_with_placement(self):
-        """测试带 placement 约束的域分配"""
+        """Test domain allocation with placement constraints"""
         doc = self.create_test_doc(
             node_ids=["a", "b", "c"],
             edges=[
@@ -107,32 +107,37 @@ class TestDomainAllocator:
         )
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc)
-        
-        # a 和 b 应该在同一域
+
+        # a and b should be in the same domain
         domain_a = domain_map["a"]
         domain_b = domain_map["b"]
-        assert domain_a is domain_b  # 同一个对象
+        assert domain_a is domain_b  # Same object
         assert domain_a.node_ids == {"a", "b"}
         assert domain_a.domain_label == "domain1"
-        
-        # c 应该在单独域
+
+        # c should be in separate domain
         domain_c = domain_map["c"]
         assert domain_c is not domain_a
         assert "c" in domain_c.node_ids
 
     def test_allocate_domains_with_resource(self):
-        """测试带 resource 依赖的域分配"""
+        """Test domain allocation with resource dependencies"""
         doc = self.create_test_doc(
             node_ids=["a", "b", "c"],
             edges=[
-                create_edge(from_="a", to="b", kind=EdgeKind.RESOURCE, resource_name="shared_res"),
+                create_edge(
+                    from_="a",
+                    to="b",
+                    kind=EdgeKind.RESOURCE,
+                    resource_name="shared_res",
+                ),
                 create_edge(from_="b", to="c", kind=EdgeKind.DATA),
             ],
         )
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc)
-        
-        # a 和 b 应该在同一域（因为共享 resource）
+
+        # a and b should be in the same domain (because shared resource)
         domain_a = domain_map["a"]
         domain_b = domain_map["b"]
         assert domain_a is domain_b
@@ -140,7 +145,7 @@ class TestDomainAllocator:
         assert "b" in domain_a.node_ids
 
     def test_can_share_domain(self):
-        """测试 can_share_domain 方法"""
+        """Test can_share_domain method"""
         doc = self.create_test_doc(
             node_ids=["a", "b"],
             edges=[
@@ -148,13 +153,13 @@ class TestDomainAllocator:
             ],
         )
         allocator = DomainAllocator()
-        
-        # 单向依赖可以同域
+
+        # Unidirectional dependency can share domain
         assert allocator.can_share_domain("a", "b", doc.edges) is True
         assert allocator.can_share_domain("b", "a", doc.edges) is True
 
     def test_can_share_domain_mutual_dependency(self):
-        """测试相互依赖的节点不能共享域"""
+        """Test mutually dependent nodes cannot share domain"""
         doc = self.create_test_doc(
             node_ids=["a", "b"],
             edges=[
@@ -163,18 +168,18 @@ class TestDomainAllocator:
             ],
         )
         allocator = DomainAllocator()
-        
-        # 相互依赖不能同域
+
+        # Mutual dependency cannot share domain
         assert allocator.can_share_domain("a", "b", doc.edges) is False
         assert allocator.can_share_domain("b", "a", doc.edges) is False
 
     def test_can_share_domain_no_edges(self):
-        """测试无边时的共享判断"""
+        """Test sharing judgment with no edges"""
         allocator = DomainAllocator()
         assert allocator.can_share_domain("a", "b", []) is True
 
     def test_allocate_domains_multiple_placements(self):
-        """测试多个 placement 约束"""
+        """Test multiple placement constraints"""
         doc = self.create_test_doc(
             node_ids=["a", "b", "c", "d"],
             edges=[
@@ -190,20 +195,22 @@ class TestDomainAllocator:
         )
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc)
-        
-        # a 和 b 同域
+
+        # a and b share domain
         assert domain_map["a"] is domain_map["b"]
-        # c 和 d 同域
+        # c and d share domain
         assert domain_map["c"] is domain_map["d"]
-        # 两个域不同
+        # Two domains are different
         assert domain_map["a"] is not domain_map["c"]
 
     def test_allocate_domains_resource_and_placement(self):
-        """测试同时有 resource 和 placement 约束"""
+        """Test both resource and placement constraints"""
         doc = self.create_test_doc(
             node_ids=["a", "b", "c"],
             edges=[
-                create_edge(from_="a", to="b", kind=EdgeKind.RESOURCE, resource_name="res1"),
+                create_edge(
+                    from_="a", to="b", kind=EdgeKind.RESOURCE, resource_name="res1"
+                ),
             ],
             placement=[
                 Placement(target="b", domain="domain1"),
@@ -212,72 +219,74 @@ class TestDomainAllocator:
         )
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc)
-        
-        # b 和 c 应该在同一域（placement）
+
+        # b and c should be in same domain (placement)
         assert domain_map["b"] is domain_map["c"]
-        # a 和 b 应该在同一域（resource）
+        # a and b should be in same domain (resource)
         assert domain_map["a"] is domain_map["b"]
-        # 所以 a, b, c 都在同一域
+        # So a, b, c are all in same domain
         assert domain_map["a"] is domain_map["c"]
 
     def test_allocate_domains_with_limited_domains(self):
-        """测试有限可用域的情况"""
+        """Test with limited available domains"""
         doc = self.create_test_doc(
             node_ids=["a", "b"],
             edges=[],
             placement=[
                 Placement(target="a", domain="domain1"),
-                Placement(target="b", domain="domain1"),  # 改为同域以确保 placement 被应用
+                Placement(
+                    target="b", domain="domain1"
+                ),  # Changed to same domain to ensure placement is applied
             ],
         )
         allocator = DomainAllocator(available_domains={"domain1"})
         domain_map = allocator.allocate_domains(doc)
-        
-        # domain1 可用，a 和 b 都在 domain1
+
+        # domain1 is available, a and b are both in domain1
         assert domain_map["a"].domain_label == "domain1"
         assert domain_map["b"].domain_label == "domain1"
 
     def test_merge_domains(self):
-        """测试 _merge_domains 方法"""
+        """Test _merge_domains method"""
         domain_map = {
             "a": ExecutionDomain(node_ids={"a"}, resource_names=set()),
             "b": ExecutionDomain(node_ids={"b"}, resource_names=set()),
             "c": ExecutionDomain(node_ids={"c"}, resource_names=set()),
         }
         allocator = DomainAllocator()
-        
-        # 合并 a 和 b
+
+        # Merge a and b
         result = allocator._merge_domains({"a", "b"}, domain_map)
-        
-        # a 和 b 应该指向同一个域
+
+        # a and b should point to same domain
         assert result["a"] is result["b"]
         assert result["a"].node_ids == {"a", "b"}
 
     def test_merge_single_target(self):
-        """测试合并单个目标"""
+        """Test merging single target"""
         domain_map = {
             "a": ExecutionDomain(node_ids={"a"}, resource_names=set()),
         }
         allocator = DomainAllocator()
-        
+
         result = allocator._merge_domains({"a"}, domain_map)
-        # 单个目标不应该改变
+        # Single target should not change
         assert result["a"].node_ids == {"a"}
 
     def test_allocate_domains_empty_document(self):
-        """测试空文档的域分配"""
+        """Test domain allocation for empty document"""
         doc = LinJDocument(linj_version="1.0", nodes=[], edges=[])
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc)
-        
+
         assert len(domain_map) == 0
 
 
 class TestDomainAllocatorIntegration:
-    """域分配器集成测试"""
+    """DomainAllocator integration tests"""
 
     def create_complex_doc(self) -> tuple[LinJDocument, List[Edge]]:
-        """创建复杂测试文档"""
+        """Create complex test document"""
         nodes = [
             create_node_dict("init"),
             create_node_dict("process_a"),
@@ -303,16 +312,16 @@ class TestDomainAllocatorIntegration:
         return doc, edges
 
     def test_complex_allocation(self):
-        """测试复杂场景的域分配"""
+        """Test domain allocation for complex scenario"""
         doc, edges = self.create_complex_doc()
         allocator = DomainAllocator()
         domain_map = allocator.allocate_domains(doc, edges)
-        
-        # init 和 merge 应该在各自的域
+
+        # init and merge should be in their own domains
         assert domain_map["init"].node_ids == {"init"}
         assert domain_map["merge"].node_ids == {"merge"}
-        
-        # process_a 和 process_b 应该在同一域
+
+        # process_a and process_b should be in same domain
         assert domain_map["process_a"] is domain_map["process_b"]
         assert domain_map["process_a"].node_ids == {"process_a", "process_b"}
         assert domain_map["process_a"].domain_label == "workers"
