@@ -11,14 +11,29 @@ dependencies = [
     "pytest-asyncio>=1.3.0",
     "pyyaml>=6.0.3",
     "structlog>=25.5.0",
-    "langgraph>=0.2.0",
-    "langchain>=0.3.0",
-    "langchain-core>=0.3.0",
     "typing-extensions>=4.5.0",
     "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]
+# AutoGen backend
+autogen = [
+    "linj-autogen",
+]
+
+# LangGraph backend
+langgraph = [
+    "langgraph>=0.2.0",
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+]
+
+# Install all backends
+all = [
+    "linj[autogen]",
+    "linj[langgraph]",
+]
+
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
